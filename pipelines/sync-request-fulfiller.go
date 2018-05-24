@@ -40,6 +40,8 @@ func SyncRequestFulfiller(ctx context.Context, node *n3peer.Node, in <-chan *mes
 			go func() {
 				// 		get a wrapped stream from node
 				ws, err := node.GetWrappedSyncResponseStream(sync_req.SourceId)
+				defer node.CloseSyncResponseStream(ws)
+
 				// 		open the feed stream
 				feed_msgs, f2p_errc, err := feedToPeerPipeline(ctx, sync_req)
 				if err != nil {

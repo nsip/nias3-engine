@@ -35,6 +35,7 @@ func main() {
 	global := flag.Bool("global", true, "use global ipfs peers for bootstrapping")
 	name := flag.String("name", "", "id for testing (appears in test data)")
 	testMessages := flag.Int("test-messages", 0, "no. test mesasges to generate")
+	nodePort := flag.Int("node-port", 0, "p2p listener port")
 	flag.Parse()
 
 	// start the streaming server
@@ -120,7 +121,7 @@ func main() {
 	// create the p2p node
 	//
 	log.Println("=== Creating P2P Node & Pipelines ===")
-	p2pnode := n3peer.NewNode(*global, inboundMsgChan, inboundSyncRequestChan)
+	p2pnode := n3peer.NewNode(*global, *nodePort, inboundMsgChan, inboundSyncRequestChan)
 	// log.Printf("\n\n%#v\n\n", p2pnode)
 
 	//

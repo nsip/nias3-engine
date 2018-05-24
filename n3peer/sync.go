@@ -95,6 +95,8 @@ func (sp *SyncProtocol) onSyncResponse(s inet.Stream) {
 
 	log.Println("onSyncResponse:\tstream received...")
 	ws := sp.node.WrapStream(s)
+	defer ws.stream.Close()
+
 	sp.handleSyncStream(ws)
 }
 
@@ -139,6 +141,8 @@ func (sp *SyncProtocol) SendSyncRequest(srq *messages.SyncRequest) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot create stream to remote peer:")
 	}
+	defer ws.stream.Close()
+
 	log.Println("SendSyncRequest:\tremote peer stream established")
 	log.Println("SendSyncRequest:\tsending sync request...")
 	return sendSyncRequest(srq, ws)
@@ -208,6 +212,10 @@ func (sp *SyncProtocol) GetWrappedSyncResponseStream(target string) (*WrappedStr
 
 	return ws, nil
 
+}
+
+func (sp *SyncProtocol) CloseSyncResponseStream(ws *WrappedStream) {
+	ws.stream.Close()
 }
 
 //
