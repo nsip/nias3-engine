@@ -72,10 +72,15 @@ func (n *Node) WrapStream(s inet.Stream) *WrappedStream {
 // inboundChan: connector into the blockchain/hexastore environment
 // to pass in any messages received over the p2p protocol
 //
-func NewNode(global bool, inboundMsgChan chan<- *messages.SignedN3Message,
+func NewNode(global bool, lport int, inboundMsgChan chan<- *messages.SignedN3Message,
 	inboundSyncReqChan chan<- *messages.SyncRequest) *Node {
 
-	port := utils.GetAvailPort()
+	var port int
+	if lport == 0 {
+		port = utils.GetAvailPort()
+	} else {
+		port = lport
+	}
 
 	// Make a host that listens on the given multiaddress
 	var bootstrapPeers []pstore.PeerInfo
