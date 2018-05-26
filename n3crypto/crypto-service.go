@@ -15,8 +15,8 @@ import (
 	"github.com/nsip/nias3-engine/messages"
 )
 
-// Ensure CryptoService implements n3.CryptoService interface
-var _ n3.CryptoService = &CryptoService{}
+// // Ensure CryptoService implements n3.CryptoService interface
+// var _ n3.CryptoService = &CryptoService{}
 
 type CryptoService struct {
 	cryptoClient *cryptoClient
@@ -38,14 +38,13 @@ func NewCryptoService() (*CryptoService, error) {
 // returns the public id of the underlying n3 instance
 // p2p nodes have their own identity
 //
-func (cs *CryptoService) PublicID() (string, error) {
+func (cs *CryptoService) PublicID() string {
 
 	idFromKey, err := peer.IDFromPublicKey(cs.cryptoClient.pubKey)
 	if err != nil {
 		log.Println(err, "Failed to extract peer id from public key")
-		return "", err
 	}
-	return idFromKey.Pretty(), nil
+	return idFromKey.Pretty()
 }
 
 //
