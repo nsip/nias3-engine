@@ -26,10 +26,11 @@ type SPOTuple struct {
 	Subject   string
 	Predicate string
 	Object    string
+	Version   int
 }
 
 func (t *SPOTuple) Bytes() []byte {
-	return []byte(fmt.Sprintf("%s:%s:%s:%s", t.Context, t.Subject, t.Predicate, t.Object))
+	return []byte(fmt.Sprintf("%s:%s:%s:%s:%d", t.Context, t.Subject, t.Predicate, t.Object, t.Version))
 }
 
 //
@@ -37,19 +38,6 @@ func (t *SPOTuple) Bytes() []byte {
 //
 func (b *Block) Verify() bool {
 	return true
-}
-
-// Serialize serializes the block
-func (b *Block) Serialize() []byte {
-	var result bytes.Buffer
-	encoder := gob.NewEncoder(&result)
-
-	err := encoder.Encode(b)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	return result.Bytes()
 }
 
 // NewBlock creates and returns Block
@@ -63,7 +51,7 @@ func NewBlock(data SPOTuple, prevBlockHash []byte) *Block {
 	}
 
 	// assign new hash
-	block.SetHash()
+	block.setHash()
 
 	// now sign the completed block
 	block.sign()
@@ -71,7 +59,7 @@ func NewBlock(data SPOTuple, prevBlockHash []byte) *Block {
 	return block
 }
 
-func (b *Block) SetHash() {
+func (b *Block) setHash() {
 	timestamp := []byte(strconv.FormatInt(b.Timestamp, 10))
 	headers := bytes.Join([][]byte{b.PrevBlockHash, b.Data.Bytes(), timestamp}, []byte{})
 	hash := sha256.Sum256(headers)
@@ -90,6 +78,19 @@ func NewGenesisBlock(contextName string) *Block {
 		Object:    "Genesis",
 		Context:   contextName}
 	return NewBlock(t, []byte{})
+}
+
+// Serialize serializes the block
+func (b *Block) Serialize() []byte {
+	var result bytes.Buffer
+	encoder := gob.NewEncoder(&result)
+
+	err := encoder.Encode(b)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return result.Bytes()
 }
 
 // DeserializeBlock deserializes a block

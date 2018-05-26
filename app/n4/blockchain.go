@@ -8,6 +8,7 @@ import (
 
 	"github.com/coreos/bbolt"
 	"github.com/nsip/nias3-engine/n3crypto"
+	"github.com/pkg/errors"
 )
 
 const dbFile = "blockchain.db"
@@ -16,14 +17,31 @@ const contextsBucket = "contexts"
 
 var cs, err = n3crypto.NewCryptoService()
 
+var boltDB *bolt.DB
+
+func init() {
+	if boltDB == nil {
+		var dbErr error
+		dbPath := "./n3.db"
+		boltDB, dbErr = bolt.Open("n3.db", 0600, nil)
+		if dbErr != nil {
+			log.Fatal(errors.Wrap(dbErr, "cannot open n3 datastore "+dbPath))
+		}
+	}
+}
+
 // Blockchain keeps a sequence of Blocks
 type Blockchain struct {
-	tip []byte
-	db  *bolt.DB
+	context string
+	author  []byte
+	tip     []byte
+	db      *bolt.DB
 }
 
 // BlockchainIterator is used to iterate over blockchain blocks
 type BlockchainIterator struct {
+	context     string
+	author      []byte
 	currentHash []byte
 	db          *bolt.DB
 }
@@ -69,7 +87,10 @@ func (bc *Blockchain) AddBlock(data SPOTuple) {
 
 // Iterator ...
 func (bc *Blockchain) Iterator() *BlockchainIterator {
-	bci := &BlockchainIterator{bc.tip, bc.db}
+	bci := &BlockchainIterator{currentHash: bc.tip,
+		db:      bc.db,
+		author:  bc.author,
+		context: bc.context}
 
 	return bci
 }
@@ -79,7 +100,11 @@ func (i *BlockchainIterator) Next() *Block {
 	var block *Block
 
 	err := i.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
+		root := tx.Bucket([]byte(contextsBucket))
+		cntx := root.Bucket([]byte(i.context))
+		usr := cntx.Bucket(i.author)
+		b := usr.Bucket([]byte(blocksBucket))
+
 		encodedBlock := b.Get(i.currentHash)
 		block = DeserializeBlock(encodedBlock)
 
@@ -95,13 +120,14 @@ func (i *BlockchainIterator) Next() *Block {
 	return block
 }
 
+//
 // NewBlockchain creates a new Blockchain with genesis Block
-func NewBlockchain(contextName string, author []byte) *Blockchain {
+// for the current owner with the specified context
+//
+func NewBlockchain(contextName string) *Blockchain {
 	var tip []byte
-	db, err := bolt.Open(dbFile, 0600, nil)
-	if err != nil {
-		log.Panic(err)
-	}
+	db := boltDB
+	author := []byte(cs.PublicID())
 
 	err = db.Update(func(tx *bolt.Tx) error {
 
@@ -143,7 +169,47 @@ func NewBlockchain(contextName string, author []byte) *Blockchain {
 		log.Panic(err)
 	}
 
-	bc := Blockchain{tip, db}
+	bc := Blockchain{context: contextName,
+		author: author,
+		tip:    tip,
+		db:     db}
 
 	return &bc
+}
+
+//
+// returns the blockchain for the given context/user if one exists,
+// otherwise retuns an empty blockchain container
+//
+func GetBlockchain(contextName string, author []byte) *Blockchain {
+
+	var tip []byte
+	db := boltDB
+
+	err = db.Update(func(tx *bolt.Tx) error {
+
+		root, err := tx.CreateBucketIfNotExists([]byte(contextsBucket))
+		cntx, err := root.CreateBucketIfNotExists([]byte(contextName))
+		usr, err := cntx.CreateBucketIfNotExists(author)
+		b, err := usr.CreateBucketIfNotExists([]byte(blocksBucket))
+		if err != nil {
+			return err
+		}
+
+		tip = b.Get([]byte("l"))
+
+		return nil
+	})
+
+	if err != nil {
+		log.Panic(err)
+	}
+
+	bc := &Blockchain{context: contextName,
+		author: author,
+		tip:    tip,
+		db:     db}
+
+	return bc
+
 }
