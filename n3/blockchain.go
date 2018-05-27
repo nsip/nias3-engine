@@ -1,6 +1,6 @@
 // blockchain.go
 
-package n4
+package n3
 
 import (
 	"fmt"
@@ -46,8 +46,11 @@ type BlockchainIterator struct {
 	db          *bolt.DB
 }
 
+//
 // AddBlock saves provided data as a block in the blockchain
-func (bc *Blockchain) AddBlock(data SPOTuple) {
+// returns the accpted block
+//
+func (bc *Blockchain) AddBlock(data *SPOTuple) *Block {
 	var lastHash []byte
 
 	err := bc.db.View(func(tx *bolt.Tx) error {
@@ -68,7 +71,10 @@ func (bc *Blockchain) AddBlock(data SPOTuple) {
 	newBlock := NewBlock(data, lastHash)
 
 	err = bc.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
+		root := tx.Bucket([]byte(contextsBucket))
+		cntx := root.Bucket([]byte(data.Context))
+		usr := cntx.Bucket([]byte(cs.PublicID()))
+		b := usr.Bucket([]byte(blocksBucket))
 		err := b.Put(newBlock.Hash, newBlock.Serialize())
 		if err != nil {
 			log.Panic(err)
@@ -83,6 +89,8 @@ func (bc *Blockchain) AddBlock(data SPOTuple) {
 
 		return nil
 	})
+
+	return newBlock
 }
 
 // Iterator ...
@@ -143,7 +151,7 @@ func NewBlockchain(contextName string) *Blockchain {
 			fmt.Println("No existing blockchain found. Creating a new one...")
 			genesis := NewGenesisBlock(contextName)
 
-			b, err := tx.CreateBucket([]byte(blocksBucket))
+			b, err := usr.CreateBucket([]byte(blocksBucket))
 			if err != nil {
 				log.Panic(err)
 			}

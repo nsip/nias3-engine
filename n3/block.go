@@ -1,6 +1,13 @@
 // block.go
 
-package n4
+package n3
+
+// DO NOT remove the line below, this is used by the
+// go generate tool to create the protobuf message support classes
+// for all data messages.
+//
+//go:generate protoc --go_out=. block.proto
+//
 
 import (
 	"bytes"
@@ -12,22 +19,26 @@ import (
 	"time"
 )
 
-type Block struct {
-	Timestamp     int64
-	Data          SPOTuple
-	PrevBlockHash []byte
-	Hash          []byte
-	Sig           []byte
-	Author        []byte
-}
+//
+// for reference only, real message definitions
+// are in the protobuf files bloc.proto / block.pb.go
+//
+// type Block struct {
+// 	Timestamp     int64
+// 	Data          *SPOTuple
+// 	PrevBlockHash []byte
+// 	Hash          []byte
+// 	Sig           []byte
+// 	Author        []byte
+// }
 
-type SPOTuple struct {
-	Context   string
-	Subject   string
-	Predicate string
-	Object    string
-	Version   int
-}
+// type SPOTuple struct {
+// 	Context   string
+// 	Subject   string
+// 	Predicate string
+// 	Object    string
+// 	Version   uint64
+// }
 
 func (t *SPOTuple) Bytes() []byte {
 	return []byte(fmt.Sprintf("%s:%s:%s:%s:%d", t.Context, t.Subject, t.Predicate, t.Object, t.Version))
@@ -41,7 +52,7 @@ func (b *Block) Verify() bool {
 }
 
 // NewBlock creates and returns Block
-func NewBlock(data SPOTuple, prevBlockHash []byte) *Block {
+func NewBlock(data *SPOTuple, prevBlockHash []byte) *Block {
 	block := &Block{Timestamp: time.Now().Unix(),
 		Data:          data,
 		PrevBlockHash: prevBlockHash,
@@ -49,6 +60,12 @@ func NewBlock(data SPOTuple, prevBlockHash []byte) *Block {
 		Sig:           []byte{},
 		Author:        []byte{}, // set this from cs
 	}
+
+	// assign tuple version
+	// assignTupleVersion()
+
+	// assign author - id from this machine
+	block.Author = []byte("itsme")
 
 	// assign new hash
 	block.setHash()
@@ -73,7 +90,7 @@ func (b *Block) sign() {
 
 // NewGenesisBlock creates and returns genesis Block
 func NewGenesisBlock(contextName string) *Block {
-	t := SPOTuple{Subject: "Genesis",
+	t := &SPOTuple{Subject: "Genesis",
 		Predicate: "Genesis",
 		Object:    "Genesis",
 		Context:   contextName}

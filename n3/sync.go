@@ -1,6 +1,6 @@
 // sync.go
 
-package n4
+package n3
 
 import (
 	"fmt"
@@ -37,8 +37,8 @@ func (sp *SyncProtocol) handleStream(s net.Stream) {
 	// Create a buffer stream for non blocking read and write.
 	// rw := bufio.NewReadWriter(ws.r, ws.w)
 
-	go sp.readData(ws)
-	go sp.writeData(ws)
+	go sp.ReadData(ws)
+	go sp.WriteData(ws)
 
 	// stream 's' will stay open until you close it (or the other side closes it).
 }
@@ -47,15 +47,17 @@ func (sp *SyncProtocol) handleStream(s net.Stream) {
 // listen for transmitted blocks
 // and add them to the local blockchains
 //
-func (sp *SyncProtocol) readData(ws *WrappedStream) {
+func (sp *SyncProtocol) ReadData(ws *WrappedStream) {
 
 	for {
 
 		b, err := receiveBlock(ws)
 		if err != nil {
-			log.Println("read-block error: ", err)
-			continue
+			// log.Println("read-block error: ", err)
+			break
 		}
+
+		log.Println("...got a message")
 
 		if !b.Verify() {
 			log.Println("recieved block failed verification %v", b)
@@ -83,7 +85,7 @@ func receiveBlock(ws *WrappedStream) (*Block, error) {
 //
 // send block data to peers
 //
-func (sp *SyncProtocol) writeData(ws *WrappedStream) {
+func (sp *SyncProtocol) WriteData(ws *WrappedStream) {
 
 	// go func() {
 	// 	for {
@@ -111,10 +113,11 @@ func (sp *SyncProtocol) writeData(ws *WrappedStream) {
 	for {
 
 		b := <-sp.node.BlockChan
+		log.Println("...block received for writing ")
 		err := sendBlock(b, ws)
 		if err != nil {
-			log.Println("unable to write block to stream: ", err)
-			continue
+			// log.Println("unable to write block to stream: ", err)
+			break
 		}
 
 		// maybe also write tuple to feed
