@@ -22,15 +22,15 @@ type CryptoService struct {
 	cryptoClient *cryptoClient
 }
 
-func NewCryptoService() (*CryptoService, error) {
+func NewCryptoService() *CryptoService {
 	cs := &CryptoService{}
 	cc, err := NewCryptoClient()
 	if err != nil {
-		return nil, err
+		log.Fatal("cannot create crypto service: ", err)
 	}
 	cs.cryptoClient = cc
 	// log.Println("crypto service created...")
-	return cs, nil
+	return cs
 
 }
 
@@ -38,13 +38,13 @@ func NewCryptoService() (*CryptoService, error) {
 // returns the public id of the underlying n3 instance
 // p2p nodes have their own identity
 //
-func (cs *CryptoService) PublicID() string {
+func (cs *CryptoService) PublicID() []byte {
 
 	idFromKey, err := peer.IDFromPublicKey(cs.cryptoClient.pubKey)
 	if err != nil {
-		log.Println(err, "Failed to extract peer id from public key")
+		log.Fatalln("Failed to extract peer id from public key: ", err)
 	}
-	return idFromKey.Pretty()
+	return []byte(idFromKey.Pretty())
 }
 
 //
@@ -163,4 +163,13 @@ func (cs *CryptoService) signMessage(data []byte) ([]byte, error) {
 	res, err := key.Sign(data)
 	return res, err
 
+}
+
+//
+// sign a block
+//
+func (cs *CryptoService) SignBlock(data []byte) ([]byte, error) {
+	key := privKey
+	res, err := key.Sign(data)
+	return res, err
 }

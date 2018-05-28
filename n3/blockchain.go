@@ -7,15 +7,12 @@ import (
 	"log"
 
 	"github.com/coreos/bbolt"
-	"github.com/nsip/nias3-engine/n3crypto"
 	"github.com/pkg/errors"
 )
 
 const dbFile = "blockchain.db"
 const blocksBucket = "blocks"
 const contextsBucket = "contexts"
-
-var cs, err = n3crypto.NewCryptoService()
 
 var boltDB *bolt.DB
 
@@ -65,10 +62,14 @@ func (bc *Blockchain) AddBlock(data *SPOTuple) *Block {
 	})
 
 	if err != nil {
-		log.Panic(err)
+		log.Fatal("add-block error: ", err)
 	}
 
-	newBlock := NewBlock(data, lastHash)
+	newBlock, err := NewBlock(data, lastHash)
+	if err != nil {
+		log.Println("unable to add block: ", err)
+		return nil
+	}
 
 	err = bc.db.Update(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(contextsBucket))
@@ -137,7 +138,7 @@ func NewBlockchain(contextName string) *Blockchain {
 	db := boltDB
 	author := []byte(cs.PublicID())
 
-	err = db.Update(func(tx *bolt.Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 
 		root, err := tx.CreateBucketIfNotExists([]byte(contextsBucket))
 		cntx, err := root.CreateBucketIfNotExists([]byte(contextName))
@@ -149,7 +150,10 @@ func NewBlockchain(contextName string) *Blockchain {
 
 		if b == nil {
 			fmt.Println("No existing blockchain found. Creating a new one...")
-			genesis := NewGenesisBlock(contextName)
+			genesis, err := NewGenesisBlock(contextName)
+			if err != nil {
+				return err
+			}
 
 			b, err := usr.CreateBucket([]byte(blocksBucket))
 			if err != nil {
@@ -194,7 +198,7 @@ func GetBlockchain(contextName string, author []byte) *Blockchain {
 	var tip []byte
 	db := boltDB
 
-	err = db.Update(func(tx *bolt.Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 
 		root, err := tx.CreateBucketIfNotExists([]byte(contextsBucket))
 		cntx, err := root.CreateBucketIfNotExists([]byte(contextName))

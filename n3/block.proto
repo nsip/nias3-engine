@@ -14,7 +14,7 @@ message SPOTuple {
 }
 
 message Block {
-	int64 		Timestamp =1;
+	bytes 		BlockId =1;
 	SPOTuple	Data = 2;
 	bytes 		PrevBlockHash = 3;
 	bytes 		Hash = 4;

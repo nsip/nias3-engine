@@ -4,13 +4,18 @@ package n3
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"log"
 
 	host "github.com/libp2p/go-libp2p-host"
 	net "github.com/libp2p/go-libp2p-net"
-	"github.com/matt-farmer/n3/utils"
+	peer "github.com/libp2p/go-libp2p-peer"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 	multicodec "github.com/multiformats/go-multicodec"
 	protobufCodec "github.com/multiformats/go-multicodec/protobuf"
+	"github.com/nsip/nias3-engine/utils"
 )
 
 // node client version
@@ -32,6 +37,14 @@ type WrappedStream struct {
 	dec    multicodec.Decoder
 	w      *bufio.Writer
 	r      *bufio.Reader
+}
+
+//
+// helper method returns the string id of the
+// connecting peer
+//
+func (ws *WrappedStream) peerID() []byte {
+	return []byte(ws.stream.Conn().RemotePeer().Pretty())
 }
 
 // wrapStream takes a stream and complements it with r/w bufios and
@@ -78,9 +91,64 @@ func NewNode(lport int, secio bool, randseed int64) *Node {
 	}
 
 	node := &Node{Host: host}
-	node.BlockChan = make(chan *Block, 10)
+	node.BlockChan = make(chan *Block, 1)
 	node.SyncProtocol = NewSyncProtocol(node)
 	return node
+}
+
+//
+// given a remote peer address, attempts to connect and
+// instatiates protocol handlers
+//
+func (n *Node) ConnectToPeer(peerAddress string) error {
+
+	// The following code extracts target's peer ID from the
+	// given multiaddress
+	ipfsaddr, err := ma.NewMultiaddr(peerAddress)
+	if err != nil {
+		return err
+	}
+
+	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
+	if err != nil {
+		return err
+	}
+
+	peerid, err := peer.IDB58Decode(pid)
+	if err != nil {
+		return err
+	}
+
+	// Decapsulate the /ipfs/<peerID> part from the target
+	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
+	targetPeerAddr, _ := ma.NewMultiaddr(
+		fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
+	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
+
+	// We have a peer ID and a targetAddr so we add it to the peerstore
+	// so LibP2P knows how to contact it
+	n.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
+
+	err = n.initiateSyncProtocol(peerid)
+
+	return err
+
+}
+
+func (n *Node) initiateSyncProtocol(peerid peer.ID) error {
+
+	log.Println("...opening stream to remote peer")
+	// initiate a stream to the remote host
+	s, err := n.NewStream(context.Background(), peerid, syncProtocol)
+	if err != nil {
+		return err
+	}
+	log.Println("...stream established")
+
+	n.handleSyncStream(s)
+
+	return nil
+
 }
 
 // //

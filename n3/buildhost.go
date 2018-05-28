@@ -4,14 +4,12 @@ package n3
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io/ioutil"
 	"log"
 
 	ds "github.com/ipfs/go-datastore"
 	dsync "github.com/ipfs/go-datastore/sync"
-	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	host "github.com/libp2p/go-libp2p-host"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -26,75 +24,75 @@ import (
 
 var hostPrivKey crypto.PrivKey
 
-// can be useful if you want non-persistent identities
-// especially for testing
-func makeRandomHost(port int) host.Host {
-	// Ignoring most errors for brevity
-	// See echo example for more details and better implementation
-	priv, pub, _ := crypto.GenerateKeyPair(crypto.RSA, 2048)
-	pid, _ := peer.IDFromPublicKey(pub)
-	listen, _ := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port))
-	ps := pstore.NewPeerstore()
-	ps.AddPrivKey(pid, priv)
-	ps.AddPubKey(pid, pub)
-	n, _ := swarm.NewNetwork(context.Background(),
-		[]ma.Multiaddr{listen}, pid, ps, nil)
-	return bhost.New(n)
-}
+// // can be useful if you want non-persistent identities
+// // especially for testing
+// func makeRandomHost(port int) host.Host {
+// 	// Ignoring most errors for brevity
+// 	// See echo example for more details and better implementation
+// 	priv, pub, _ := crypto.GenerateKeyPair(crypto.RSA, 2048)
+// 	pid, _ := peer.IDFromPublicKey(pub)
+// 	listen, _ := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port))
+// 	ps := pstore.NewPeerstore()
+// 	ps.AddPrivKey(pid, priv)
+// 	ps.AddPubKey(pid, pub)
+// 	n, _ := swarm.NewNetwork(context.Background(),
+// 		[]ma.Multiaddr{listen}, pid, ps, nil)
+// 	return bhost.New(n)
+// }
 
-// makeBasicHost creates a LibP2P host listening on the
-// given multiaddress.
-//
-// use this rather than routedHost when on known networks or where
-// sharig ip address is ok,
-func makeBasicHost(listenPort int) (host.Host, error) {
+// // makeBasicHost creates a LibP2P host listening on the
+// // given multiaddress.
+// //
+// // use this rather than routedHost when on known networks or where
+// // sharig ip address is ok,
+// func makeBasicHost(listenPort int) (host.Host, error) {
 
-	if hostPrivKey == nil {
-		var loadErr error
-		privKey, loadErr := loadHostKey()
-		if loadErr != nil {
-			r := rand.Reader
-			var genErr error
-			privKey, _, genErr = crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
-			if genErr != nil {
-				return nil, errors.Wrap(genErr, "unable to generate host identity key")
-			}
-		}
-		hostPrivKey = privKey
-	}
+// 	if hostPrivKey == nil {
+// 		var loadErr error
+// 		privKey, loadErr := loadHostKey()
+// 		if loadErr != nil {
+// 			r := rand.Reader
+// 			var genErr error
+// 			privKey, _, genErr = crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
+// 			if genErr != nil {
+// 				return nil, errors.Wrap(genErr, "unable to generate host identity key")
+// 			}
+// 		}
+// 		hostPrivKey = privKey
+// 	}
 
-	err := saveHostKey(hostPrivKey)
-	if err != nil {
-		log.Println("cannot persist host id, id is ephemoral")
-	}
+// 	err := saveHostKey(hostPrivKey)
+// 	if err != nil {
+// 		log.Println("cannot persist host id, id is ephemoral")
+// 	}
 
-	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", listenPort)),
-		libp2p.Identity(hostPrivKey),
-	}
+// 	opts := []libp2p.Option{
+// 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", listenPort)),
+// 		libp2p.Identity(hostPrivKey),
+// 	}
 
-	basicHost, err := libp2p.New(context.Background(), opts...)
-	if err != nil {
-		return nil, err
-	}
+// 	basicHost, err := libp2p.New(context.Background(), opts...)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	// Build host multiaddress
-	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", basicHost.ID().Pretty()))
+// 	// Build host multiaddress
+// 	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", basicHost.ID().Pretty()))
 
-	// Now we can build a full multiaddress to reach this host
-	// by encapsulating both addresses:
-	addrs := basicHost.Addrs()
-	// fullAddr := addr.Encapsulate(hostAddr)
-	// log.Printf("I am %s\n", fullAddr)
-	// log.Println("I can be reached at:")
-	for _, addr := range addrs {
-		log.Println(addr.Encapsulate(hostAddr))
-	}
+// 	// Now we can build a full multiaddress to reach this host
+// 	// by encapsulating both addresses:
+// 	addrs := basicHost.Addrs()
+// 	// fullAddr := addr.Encapsulate(hostAddr)
+// 	// log.Printf("I am %s\n", fullAddr)
+// 	// log.Println("I can be reached at:")
+// 	for _, addr := range addrs {
+// 		log.Println(addr.Encapsulate(hostAddr))
+// 	}
 
-	log.Println("Now run ./n3 -d [one of my addresses] on a different terminal")
+// 	log.Println("Now run ./n3 -d [one of my addresses] on a different terminal")
 
-	return basicHost, nil
-}
+// 	return basicHost, nil
+// }
 
 // makeRoutedHost creates a LibP2P host listening on the
 // given multiaddress. It will bootstrap using the
@@ -105,20 +103,21 @@ func makeRoutedHost(listenPort int, bootstrapPeers []pstore.PeerInfo, globalFlag
 		var loadErr error
 		privKey, loadErr := loadHostKey()
 		if loadErr != nil {
-			r := rand.Reader
-			var genErr error
-			privKey, _, genErr = crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
-			if genErr != nil {
-				return nil, errors.Wrap(genErr, "unable to generate host identity key")
-			}
+			// r := rand.Reader
+			// var genErr error
+			// privKey, _, genErr = crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
+			// if genErr != nil {
+			// 	return nil, errors.Wrap(genErr, "unable to generate host identity key")
+			// }
+			return nil, errors.Wrap(loadErr, "unable to load private key")
 		}
 		hostPrivKey = privKey
 	}
 
-	err := saveHostKey(hostPrivKey)
-	if err != nil {
-		log.Println("cannot persist host id, id is ephemoral")
-	}
+	// err := saveHostKey(hostPrivKey)
+	// if err != nil {
+	// 	log.Println("cannot persist host id, id is ephemoral")
+	// }
 
 	// Get the peer id
 	pid, err := peer.IDFromPrivateKey(hostPrivKey)
@@ -193,20 +192,20 @@ func makeRoutedHost(listenPort int, bootstrapPeers []pstore.PeerInfo, globalFlag
 	return routedHost, nil
 }
 
-func saveHostKey(privKey crypto.PrivKey) error {
-	privKeyBytes, err := crypto.MarshalPrivateKey(privKey)
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile("hostprv.key", privKeyBytes, 0644)
-	if err != nil {
-		return err
-	}
-	return nil
-}
+// func saveHostKey(privKey crypto.PrivKey) error {
+// 	privKeyBytes, err := crypto.MarshalPrivateKey(privKey)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = ioutil.WriteFile("hostprv.key", privKeyBytes, 0644)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
 func loadHostKey() (crypto.PrivKey, error) {
-	privKeyBytes, err := ioutil.ReadFile("hostprv.key")
+	privKeyBytes, err := ioutil.ReadFile("prv.key")
 	if err != nil {
 		return nil, err
 	}

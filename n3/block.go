@@ -15,9 +15,12 @@ import (
 	"encoding/gob"
 	"fmt"
 	"log"
-	"strconv"
-	"time"
+
+	"github.com/nats-io/nuid"
+	"github.com/nsip/nias3-engine/n3crypto"
 )
+
+var cs = n3crypto.NewCryptoService()
 
 //
 // for reference only, real message definitions
@@ -52,8 +55,8 @@ func (b *Block) Verify() bool {
 }
 
 // NewBlock creates and returns Block
-func NewBlock(data *SPOTuple, prevBlockHash []byte) *Block {
-	block := &Block{Timestamp: time.Now().Unix(),
+func NewBlock(data *SPOTuple, prevBlockHash []byte) (*Block, error) {
+	block := &Block{BlockId: []byte(nuid.Next()),
 		Data:          data,
 		PrevBlockHash: prevBlockHash,
 		Hash:          []byte{},
@@ -65,39 +68,55 @@ func NewBlock(data *SPOTuple, prevBlockHash []byte) *Block {
 	// assignTupleVersion()
 
 	// assign author - id from this machine
-	block.Author = []byte("itsme")
+	block.Author = cs.PublicID()
 
 	// assign new hash
 	block.setHash()
 
 	// now sign the completed block
-	block.sign()
+	err := block.sign()
+	if err != nil {
+		log.Println("unable to sign block: ", err)
+		return nil, err
+	}
 
-	return block
+	return block, nil
 }
 
 func (b *Block) setHash() {
-	timestamp := []byte(strconv.FormatInt(b.Timestamp, 10))
-	headers := bytes.Join([][]byte{b.PrevBlockHash, b.Data.Bytes(), timestamp}, []byte{})
+	id := b.BlockId
+	headers := bytes.Join([][]byte{b.PrevBlockHash, b.Data.Bytes(), id}, []byte{})
 	hash := sha256.Sum256(headers)
 
 	b.Hash = hash[:]
 }
 
-func (b *Block) sign() {
-	b.Sig = []byte("i have been signed")
+func (b *Block) sign() error {
+	var sigErr error
+	b.Sig, sigErr = cs.SignBlock(b.Serialize())
+	if sigErr != nil {
+		return sigErr
+	}
+	return nil
 }
 
 // NewGenesisBlock creates and returns genesis Block
-func NewGenesisBlock(contextName string) *Block {
+func NewGenesisBlock(contextName string) (*Block, error) {
 	t := &SPOTuple{Subject: "Genesis",
 		Predicate: "Genesis",
 		Object:    "Genesis",
 		Context:   contextName}
-	return NewBlock(t, []byte{})
+	blk, err := NewBlock(t, []byte{})
+	if err != nil {
+		return nil, err
+	}
+	return blk, nil
 }
 
-// Serialize serializes the block
+//
+// Serialize serializes the block for data storage
+// TODO: change to protobuf encoding
+//
 func (b *Block) Serialize() []byte {
 	var result bytes.Buffer
 	encoder := gob.NewEncoder(&result)
@@ -110,7 +129,10 @@ func (b *Block) Serialize() []byte {
 	return result.Bytes()
 }
 
-// DeserializeBlock deserializes a block
+//
+// DeserializeBlock deserializes a block from the datastore
+// TODO: change to protobuf encoding
+//
 func DeserializeBlock(d []byte) *Block {
 	var block Block
 
