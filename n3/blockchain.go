@@ -48,7 +48,7 @@ type BlockchainIterator struct {
 // returns the accpted block
 //
 func (bc *Blockchain) AddBlock(data *SPOTuple) *Block {
-	var lastHash []byte
+	var lastHash string
 
 	err := bc.db.View(func(tx *bolt.Tx) error {
 
@@ -56,7 +56,7 @@ func (bc *Blockchain) AddBlock(data *SPOTuple) *Block {
 		cntx := root.Bucket([]byte(data.Context))
 		usr := cntx.Bucket([]byte(cs.PublicID()))
 		b := usr.Bucket([]byte(blocksBucket))
-		lastHash = b.Get([]byte("l"))
+		lastHash = fmt.Sprintf("%x", b.Get([]byte("l")))
 
 		return nil
 	})
@@ -76,17 +76,19 @@ func (bc *Blockchain) AddBlock(data *SPOTuple) *Block {
 		cntx := root.Bucket([]byte(data.Context))
 		usr := cntx.Bucket([]byte(cs.PublicID()))
 		b := usr.Bucket([]byte(blocksBucket))
-		err := b.Put(newBlock.Hash, newBlock.Serialize())
+		err := b.Put([]byte(newBlock.Hash), newBlock.Serialize())
 		if err != nil {
-			log.Panic(err)
+			// log.Panic(err)
+			log.Println("db update error:", err)
 		}
 
-		err = b.Put([]byte("l"), newBlock.Hash)
+		err = b.Put([]byte("l"), []byte(newBlock.Hash))
 		if err != nil {
-			log.Panic(err)
+			// log.Panic(err)
+			log.Println("db l update error:", err)
 		}
 
-		bc.tip = newBlock.Hash
+		bc.tip = []byte(newBlock.Hash)
 
 		return nil
 	})
@@ -124,7 +126,7 @@ func (i *BlockchainIterator) Next() *Block {
 		log.Panic(err)
 	}
 
-	i.currentHash = block.PrevBlockHash
+	i.currentHash = []byte(block.PrevBlockHash)
 
 	return block
 }
@@ -160,16 +162,16 @@ func NewBlockchain(contextName string) *Blockchain {
 				log.Panic(err)
 			}
 
-			err = b.Put(genesis.Hash, genesis.Serialize())
+			err = b.Put([]byte(genesis.Hash), genesis.Serialize())
 			if err != nil {
 				log.Panic(err)
 			}
 
-			err = b.Put([]byte("l"), genesis.Hash)
+			err = b.Put([]byte("l"), []byte(genesis.Hash))
 			if err != nil {
 				log.Panic(err)
 			}
-			tip = genesis.Hash
+			tip = []byte(genesis.Hash)
 		} else {
 			tip = b.Get([]byte("l"))
 		}

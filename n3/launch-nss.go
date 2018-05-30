@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"time"
 
 	nats "github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
@@ -52,12 +53,54 @@ func (nss *NSS) Start() error {
 	if err != nil {
 		return errors.Wrap(err, "unable to launch nss")
 	}
+	// give the nss time to come up
+	time.Sleep(time.Second * 5)
+
+	// start safety subscribers to ensure
+	// topics exist
+	err = startSafetySubscribers()
+	if err != nil {
+		return errors.Wrap(err, "could not create safety subs: ")
+	}
+
 	return nil
 }
 
 func (nss *NSS) Stop() error {
 
 	return nss.cmd.Process.Kill()
+
+}
+
+//
+// create durable safety subscribers for
+// critical topics to ensure no message loss due to
+// handshake timings
+//
+func startSafetySubscribers() error {
+
+	log.Println("creating safety subscriber for nss:feed")
+	sc, err := NSSConnection("feedSafety")
+	if err != nil {
+		return err
+	}
+
+	// main message sending routine
+	go func() {
+		_, err := sc.Subscribe("feed", func(m *stan.Msg) {
+
+			// no-op
+
+		}, stan.DurableName("feedSafety"))
+		if err != nil {
+			log.Println("error creating safety subscription: ", err)
+			return
+		}
+	}()
+
+	time.Sleep(time.Second * 3)
+	log.Println("safety subscriber for nss:feed created")
+	return nil
 
 }
 

@@ -24,7 +24,6 @@ const clientVersion = "n3/0.0.1"
 // Node type - a p2p host implementing one or more p2p protocols
 type Node struct {
 	host.Host // lib-p2p host
-	BlockChan chan *Block
 	*SyncProtocol
 }
 
@@ -43,8 +42,12 @@ type WrappedStream struct {
 // helper method returns the string id of the
 // connecting peer
 //
-func (ws *WrappedStream) peerID() []byte {
-	return []byte(ws.stream.Conn().RemotePeer().Pretty())
+func (ws *WrappedStream) remotePeerID() string {
+	return ws.stream.Conn().RemotePeer().Pretty()
+}
+
+func (ws *WrappedStream) localPeerID() string {
+	return ws.stream.Conn().LocalPeer().Pretty()
 }
 
 // wrapStream takes a stream and complements it with r/w bufios and
@@ -91,7 +94,6 @@ func NewNode(lport int, secio bool, randseed int64) *Node {
 	}
 
 	node := &Node{Host: host}
-	node.BlockChan = make(chan *Block, 1)
 	node.SyncProtocol = NewSyncProtocol(node)
 	return node
 }
@@ -145,7 +147,7 @@ func (n *Node) initiateSyncProtocol(peerid peer.ID) error {
 	}
 	log.Println("...stream established")
 
-	n.handleSyncStream(s)
+	go n.handleSyncStream(s)
 
 	return nil
 

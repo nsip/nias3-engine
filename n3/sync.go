@@ -3,7 +3,6 @@
 package n3
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"sync"
@@ -26,7 +25,7 @@ type SyncProtocol struct {
 
 func NewSyncProtocol(node *Node) *SyncProtocol {
 	sp := &SyncProtocol{node: node}
-	node.SetStreamHandler(syncProtocol, sp.handleSyncStream)
+	sp.node.SetStreamHandler(syncProtocol, sp.handleSyncStream)
 	return sp
 }
 
@@ -74,7 +73,8 @@ func createInboundReader(ws *WrappedStream) error {
 	go func() {
 		defer sc.Close()
 		defer ws.stream.Close()
-		log.Println("reader open for: ", string(ws.peerID()))
+		log.Println("reader open for: ", string(ws.remotePeerID()))
+		i := 0
 		for {
 			b, err := receiveBlock(ws)
 			if err != nil {
@@ -82,7 +82,7 @@ func createInboundReader(ws *WrappedStream) error {
 				break
 			}
 
-			log.Println("...got a message from: ", string(ws.peerID()))
+			log.Println("...got a message from: ", string(ws.remotePeerID()))
 
 			// if !b.Verify() {
 			// 	log.Println("recieved block failed verification %v", b)
@@ -97,6 +97,8 @@ func createInboundReader(ws *WrappedStream) error {
 				break
 			}
 			log.Println("...message sent to nss:feed")
+			i++
+			log.Println("messages received: ", i)
 		}
 		// on any errors return & close nats and stream connections
 		return
@@ -112,7 +114,7 @@ func createInboundReader(ws *WrappedStream) error {
 func createOutboundWriter(ws *WrappedStream) error {
 
 	// create stan connection with random client id
-	pid := string(ws.peerID())
+	pid := string(ws.remotePeerID())
 	sc, err := NSSConnection(pid)
 	if err != nil {
 		return err
@@ -126,11 +128,29 @@ func createOutboundWriter(ws *WrappedStream) error {
 		// main message sending routine
 		sub, err := sc.Subscribe("feed", func(m *stan.Msg) {
 
+			sendMessage := true
+
 			// get the block from the feed
 			blk := DeserializeBlock(m.Data)
 
-			// see if we should send
-			if !bytes.Equal(blk.Author, ws.peerID()) {
+			// log.Printf("\n\n\tauthor: %s\n\tremote-peer: %s", blk.Author, ws.remotePeerID())
+
+			// don't send if created by the remote peer
+			if blk.Author == ws.remotePeerID() {
+				sendMessage = false
+				log.Println("author is remote peer sendmessage:", sendMessage)
+			}
+
+			// log.Printf("\n\n\tsender: %s\n\tremote-peer: %s", blk.Sender, ws.remotePeerID())
+			// don't send if it came from the reomote peer
+			if blk.Sender == ws.remotePeerID() {
+				sendMessage = false
+				log.Println("sender is remote peer sendmessage:", sendMessage)
+			}
+
+			if sendMessage {
+				// update the sender
+				blk.Sender = ws.localPeerID()
 				sendErr := sendBlock(blk, ws)
 				if sendErr != nil {
 					log.Println("cannot send message to peer: ", sendErr)
@@ -138,7 +158,10 @@ func createOutboundWriter(ws *WrappedStream) error {
 				}
 			}
 
-		}, stan.DurableName(pid))
+			m.Ack()
+
+			// }, stan.DurableName(ws.remotePeerID()), stan.SetManualAckMode())
+		}, stan.DeliverAllAvailable(), stan.SetManualAckMode())
 		if err != nil {
 			log.Println("error creating feed subscription: ", err)
 			return
@@ -204,47 +227,47 @@ func receiveBlock(ws *WrappedStream) (*Block, error) {
 //
 // send block data to peers
 //
-func (sp *SyncProtocol) WriteData(ws *WrappedStream) {
+// func (sp *SyncProtocol) WriteData(ws *WrappedStream) {
 
-	// go func() {
-	// 	for {
-	// 		time.Sleep(5 * time.Second)
-	// 		mutex.Lock()
-	// 		bytes, err := json.Marshal(Blockchain)
-	// 		if err != nil {
-	// 			log.Println(err)
-	// 		}
-	// 		mutex.Unlock()
+// go func() {
+// 	for {
+// 		time.Sleep(5 * time.Second)
+// 		mutex.Lock()
+// 		bytes, err := json.Marshal(Blockchain)
+// 		if err != nil {
+// 			log.Println(err)
+// 		}
+// 		mutex.Unlock()
 
-	// 		mutex.Lock()
-	// 		rw.WriteString(fmt.Sprintf("%s\n", string(bytes)))
-	// 		rw.Flush()
-	// 		mutex.Unlock()
+// 		mutex.Lock()
+// 		rw.WriteString(fmt.Sprintf("%s\n", string(bytes)))
+// 		rw.Flush()
+// 		mutex.Unlock()
 
-	// 	}
-	// }()
+// 	}
+// }()
 
-	//
-	// change for channel reader
-	//
-	// stdReader := bufio.NewReader(os.Stdin)
+//
+// change for channel reader
+//
+// stdReader := bufio.NewReader(os.Stdin)
 
-	for {
+// for {
 
-		b := <-sp.node.BlockChan
-		log.Println("...block received for writing ")
-		err := sendBlock(b, ws)
-		if err != nil {
-			log.Println("bad block:\n\n%v\n\n", b)
-			log.Println("unable to write block to stream: ", err)
-			break
-		}
+// 	b := <-sp.node.BlockChan
+// 	log.Println("...block received for writing ")
+// 	err := sendBlock(b, ws)
+// 	if err != nil {
+// 		log.Println("bad block:\n\n%v\n\n", b)
+// 		log.Println("unable to write block to stream: ", err)
+// 		break
+// 	}
 
-		// maybe also write tuple to feed
+// 	// maybe also write tuple to feed
 
-	}
+// }
 
-}
+// }
 
 //
 // sendBlock encodes and writes a data-message to the outbound stream
@@ -259,7 +282,7 @@ func sendBlock(block *Block, ws *WrappedStream) error {
 
 	err := ws.enc.Encode(block)
 	if err != nil {
-		log.Fatalf("block encoding error:\n\n%v\n\n", block)
+		log.Printf("block encoding error:\n\n%v\n\n", block)
 		return err
 	}
 	// Because output is buffered with bufio, we need to flush!

@@ -38,13 +38,13 @@ func NewCryptoService() *CryptoService {
 // returns the public id of the underlying n3 instance
 // p2p nodes have their own identity
 //
-func (cs *CryptoService) PublicID() []byte {
+func (cs *CryptoService) PublicID() string {
 
 	idFromKey, err := peer.IDFromPublicKey(cs.cryptoClient.pubKey)
 	if err != nil {
 		log.Fatalln("Failed to extract peer id from public key: ", err)
 	}
-	return []byte(idFromKey.Pretty())
+	return idFromKey.Pretty()
 }
 
 //

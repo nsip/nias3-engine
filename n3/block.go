@@ -12,10 +12,10 @@ package n3
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/gob"
 	"fmt"
 	"log"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/nuid"
 	"github.com/nsip/nias3-engine/n3crypto"
 )
@@ -33,6 +33,7 @@ var cs = n3crypto.NewCryptoService()
 // 	Hash          []byte
 // 	Sig           []byte
 // 	Author        []byte
+//  Sender		  []byte
 // }
 
 // type SPOTuple struct {
@@ -55,20 +56,24 @@ func (b *Block) Verify() bool {
 }
 
 // NewBlock creates and returns Block
-func NewBlock(data *SPOTuple, prevBlockHash []byte) (*Block, error) {
-	block := &Block{BlockId: []byte(nuid.Next()),
+func NewBlock(data *SPOTuple, prevBlockHash string) (*Block, error) {
+
+	block := &Block{
+		BlockId:       nuid.Next(),
 		Data:          data,
 		PrevBlockHash: prevBlockHash,
-		Hash:          []byte{},
-		Sig:           []byte{},
-		Author:        []byte{}, // set this from cs
+		Hash:          "",
+		Sig:           "",
+		Author:        cs.PublicID(),
+		Sender:        cs.PublicID(),
 	}
 
 	// assign tuple version
 	// assignTupleVersion()
 
-	// assign author - id from this machine
-	block.Author = cs.PublicID()
+	// // assign author & sender - id from this machine
+	// block.Author = cs.PublicID()
+	// block.Sender = cs.PublicID()
 
 	// assign new hash
 	block.setHash()
@@ -84,20 +89,47 @@ func NewBlock(data *SPOTuple, prevBlockHash []byte) (*Block, error) {
 }
 
 func (b *Block) setHash() {
-	id := b.BlockId
-	headers := bytes.Join([][]byte{b.PrevBlockHash, b.Data.Bytes(), id}, []byte{})
+	headers := bytes.Join([][]byte{
+		[]byte(b.PrevBlockHash),
+		b.Data.Bytes(),
+		[]byte(b.BlockId),
+	}, []byte{})
 	hash := sha256.Sum256(headers)
 
-	b.Hash = hash[:]
+	b.Hash = fmt.Sprintf("%x", hash[:])
 }
 
+//
+// add crypto signature to the payload
+//
 func (b *Block) sign() error {
 	var sigErr error
-	b.Sig, sigErr = cs.SignBlock(b.Serialize())
+	signBytes := b.signablePayload()
+	sig, sigErr := cs.SignBlock(signBytes)
 	if sigErr != nil {
 		return sigErr
 	}
+
+	b.Sig = fmt.Sprintf("%x", sig)
+
 	return nil
+}
+
+//
+// returns the parts of the block content used for
+// signature validation
+//
+func (b *Block) signablePayload() []byte {
+
+	elements := [][]byte{
+		[]byte(b.BlockId),
+		[]byte(b.Author),
+		[]byte(b.Hash),
+		[]byte(b.PrevBlockHash),
+		b.Data.Bytes(),
+	}
+	return bytes.Join(elements, []byte{})
+
 }
 
 // NewGenesisBlock creates and returns genesis Block
@@ -105,8 +137,10 @@ func NewGenesisBlock(contextName string) (*Block, error) {
 	t := &SPOTuple{Subject: "Genesis",
 		Predicate: "Genesis",
 		Object:    "Genesis",
-		Context:   contextName}
-	blk, err := NewBlock(t, []byte{})
+		Context:   contextName,
+		Version:   0,
+	}
+	blk, err := NewBlock(t, "")
 	if err != nil {
 		return nil, err
 	}
@@ -118,15 +152,23 @@ func NewGenesisBlock(contextName string) (*Block, error) {
 // TODO: change to protobuf encoding
 //
 func (b *Block) Serialize() []byte {
-	var result bytes.Buffer
-	encoder := gob.NewEncoder(&result)
 
-	err := encoder.Encode(b)
+	// log.Printf("\t...Serialize\n\n%+v\n\n", b)
+	out, err := proto.Marshal(b)
 	if err != nil {
-		log.Panic(err)
+		log.Println("block-serialize: protobuf encoding error: ", err)
 	}
+	return out
 
-	return result.Bytes()
+	// var result bytes.Buffer
+	// encoder := gob.NewEncoder(&result)
+
+	// err := encoder.Encode(b)
+	// if err != nil {
+	// 	log.Println("gob encoding error: ", err)
+	// }
+
+	// return result.Bytes()
 }
 
 //
@@ -134,13 +176,23 @@ func (b *Block) Serialize() []byte {
 // TODO: change to protobuf encoding
 //
 func DeserializeBlock(d []byte) *Block {
-	var block Block
 
-	decoder := gob.NewDecoder(bytes.NewReader(d))
-	err := decoder.Decode(&block)
+	block := &Block{}
+
+	err := proto.Unmarshal(d, block)
 	if err != nil {
-		log.Panic(err)
+		log.Println("block-deserialize: protobuf decoding error: ", err)
 	}
 
-	return &block
+	return block
+
+	// var block Block
+
+	// decoder := gob.NewDecoder(bytes.NewReader(d))
+	// err := decoder.Decode(&block)
+	// if err != nil {
+	// 	log.Println("gob decoding error: ", err)
+	// }
+
+	// return &block
 }
