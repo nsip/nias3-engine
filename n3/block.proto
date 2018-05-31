@@ -21,5 +21,5 @@ message Block {
 	string 		Sig = 5;
 	string 		Author = 6;
 	string		Sender = 7;
-
+	string 		Receiver = 8;
 }

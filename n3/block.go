@@ -132,6 +132,10 @@ func (b *Block) signablePayload() []byte {
 
 }
 
+func (b *Block) CmsKey() string {
+	return fmt.Sprintf("%s:%s", b.BlockId, b.Receiver)
+}
+
 // NewGenesisBlock creates and returns genesis Block
 func NewGenesisBlock(contextName string) (*Block, error) {
 	t := &SPOTuple{Subject: "Genesis",

@@ -25,6 +25,7 @@ const clientVersion = "n3/0.0.1"
 type Node struct {
 	host.Host // lib-p2p host
 	*SyncProtocol
+	msgCMS *N3CMS
 }
 
 // streamWrap wraps a libp2p stream. We encode/decode whenever we
@@ -78,7 +79,7 @@ func WrapStream(s net.Stream) *WrappedStream {
 // inboundChan: connector into the blockchain/hexastore environment
 // to pass in any messages received over the p2p protocol
 //
-func NewNode(lport int, secio bool, randseed int64) *Node {
+func NewNode(lport int, msgcms *N3CMS) *Node {
 
 	var port int
 	if lport == 0 {
@@ -95,6 +96,7 @@ func NewNode(lport int, secio bool, randseed int64) *Node {
 
 	node := &Node{Host: host}
 	node.SyncProtocol = NewSyncProtocol(node)
+	node.msgCMS = msgcms
 	return node
 }
 

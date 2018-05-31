@@ -43,13 +43,13 @@ func (sp *SyncProtocol) handleSyncStream(s net.Stream) {
 	// rw := bufio.NewReadWriter(ws.r, ws.w)
 
 	// go sp.ReadData(ws)
-	err := createInboundReader(ws)
+	err := sp.createInboundReader(ws)
 	if err != nil {
 		log.Println("unable to attach reader to inbound stream: ", err)
 	}
 
 	// go sp.WriteData(ws)
-	err = createOutboundWriter(ws)
+	err = sp.createOutboundWriter(ws)
 	if err != nil {
 		log.Println("unable to attach outbound writer to nss feed: ", err)
 	}
@@ -61,7 +61,7 @@ func (sp *SyncProtocol) handleSyncStream(s net.Stream) {
 // for the inbound stream listens for messages
 // and adds to the local feed
 //
-func createInboundReader(ws *WrappedStream) error {
+func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 
 	// create stan connection with random client id
 	sc, err := NSSConnection(nuid.Next())
@@ -82,7 +82,7 @@ func createInboundReader(ws *WrappedStream) error {
 				break
 			}
 
-			log.Println("...got a message from: ", string(ws.remotePeerID()))
+			// log.Println("...got a message from: ", string(ws.remotePeerID()))
 
 			// if !b.Verify() {
 			// 	log.Println("recieved block failed verification %v", b)
@@ -96,9 +96,10 @@ func createInboundReader(ws *WrappedStream) error {
 				log.Println("unable to publish message to nss: ", err)
 				break
 			}
-			log.Println("...message sent to nss:feed")
+			log.Println("...inbound message committed to nss:feed")
 			i++
-			log.Println("messages received: ", i)
+			log.Printf("\n\nmessages received from:\n\t%s\n\t%d\n\n", ws.remotePeerID(), i)
+			log.Printf("\n\n%+v\n\n", b)
 		}
 		// on any errors return & close nats and stream connections
 		return
@@ -111,7 +112,7 @@ func createInboundReader(ws *WrappedStream) error {
 // attaches to the main feed & sends messages to the
 // connected peer
 //
-func createOutboundWriter(ws *WrappedStream) error {
+func (sp *SyncProtocol) createOutboundWriter(ws *WrappedStream) error {
 
 	// create stan connection with random client id
 	pid := string(ws.remotePeerID())
@@ -148,6 +149,15 @@ func createOutboundWriter(ws *WrappedStream) error {
 				log.Println("sender is remote peer sendmessage:", sendMessage)
 			}
 
+			// don't send if the remote peer has seen it before
+			if sendMessage {
+				blk.Receiver = ws.remotePeerID()
+				if sp.node.msgCMS.Estimate(blk.CmsKey()) > 0 {
+					sendMessage = false
+					log.Println("message:", blk.BlockId, " already sent to:", ws.remotePeerID(), " sendmaessage:", sendMessage)
+				}
+			}
+
 			if sendMessage {
 				// update the sender
 				blk.Sender = ws.localPeerID()
@@ -156,12 +166,14 @@ func createOutboundWriter(ws *WrappedStream) error {
 					log.Println("cannot send message to peer: ", sendErr)
 					errc <- sendErr
 				}
+				// register that we've sent this message to this peer
+				sp.node.msgCMS.Update(blk.CmsKey(), 1)
 			}
 
-			m.Ack()
-
+			// m.Ack()
+			// }, stan.DurableName(ws.remotePeerID()))
 			// }, stan.DurableName(ws.remotePeerID()), stan.SetManualAckMode())
-		}, stan.DeliverAllAvailable(), stan.SetManualAckMode())
+		}, stan.DeliverAllAvailable())
 		if err != nil {
 			log.Println("error creating feed subscription: ", err)
 			return

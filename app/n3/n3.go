@@ -24,12 +24,24 @@ func main() {
 	}
 	defer nss.Stop()
 
+	// create the message-dedupe count min sketch
+	msgCMS, err := n3.NewN3CMS("./msgs.cms")
+	if err != nil {
+		msgCMS.Close()
+		log.Fatal(err)
+	}
+	log.Printf("\t Existing CMS:\n\n%+v\n\n", msgCMS)
+
+	x := msgCMS.Estimate("blob")
+	log.Println(x)
+
 	// initiate n3 shutdown handler
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
 		nss.Stop()
+		msgCMS.Close()
 		log.Println("n3 shutdown complete")
 		os.Exit(1)
 	}()
@@ -40,8 +52,6 @@ func main() {
 	// Parse options from the command line
 	listenF := flag.Int("l", 0, "wait for incoming connections")
 	target := flag.String("d", "", "target peer to dial")
-	secio := flag.Bool("secio", false, "enable secio")
-	seed := flag.Int64("seed", 0, "set random seed for id generation")
 	flag.Parse()
 
 	if *listenF == 0 {
@@ -51,7 +61,7 @@ func main() {
 	log.Println("starting p2p node")
 
 	// Make a node that listens on the given multiaddress
-	node := n3.NewNode(*listenF, *secio, *seed)
+	node := n3.NewNode(*listenF, msgCMS)
 
 	// connect to remote peer if supplied
 	if *target != "" {
@@ -72,7 +82,7 @@ func main() {
 		defer sc.Close()
 
 		for x := 0; x < 5; x++ {
-			for i := 0; i < 1; i++ {
+			for i := 0; i < 2; i++ {
 
 				log.Println("generating test message...")
 
