@@ -52,7 +52,13 @@ func (t *SPOTuple) Bytes() []byte {
 // check signature against author & content
 //
 func (b *Block) Verify() bool {
-	return true
+
+	isVerified, err := cs.VerifyBlock(b.signablePayload(), b.Author, b.Sig)
+	if err != nil {
+		log.Println("block verification failed: ", err)
+	}
+
+	return isVerified
 }
 
 // NewBlock creates and returns Block
@@ -175,6 +181,29 @@ func (b *Block) Serialize() []byte {
 	// return result.Bytes()
 }
 
+func (b *Block) Print() {
+	log.Printf(`
+
+		Id:
+		%s 
+		Data:
+		%+v 
+		PrevBlockHash:
+		%s
+		Hash:
+		%s
+		Sig:
+		%s
+		Author:        
+		%s
+		Sender:        
+		%s 
+		Receiver:
+		%s
+
+`, b.BlockId, b.Data, b.PrevBlockHash, b.Hash, b.Sig, b.Author, b.Sender, b.Receiver)
+}
+
 //
 // DeserializeBlock deserializes a block from the datastore
 // TODO: change to protobuf encoding
@@ -187,6 +216,8 @@ func DeserializeBlock(d []byte) *Block {
 	if err != nil {
 		log.Println("block-deserialize: protobuf decoding error: ", err)
 	}
+	// log.Println("\t...Deserialize")
+	// block.Print()
 
 	return block
 

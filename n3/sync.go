@@ -84,14 +84,25 @@ func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 
 			// log.Println("...got a message from: ", string(ws.remotePeerID()))
 
-			// if !b.Verify() {
-			// 	log.Println("recieved block failed verification %v", b)
-			// 	continue
-			// }
+			// verify - check content against signature
+			if !b.Verify() {
+				log.Printf("\n\nrecieved block failed verification %v\n\n", b)
+				continue
+			}
+			log.Println("...received block is verified")
 
-			// bc := GetBlockchain(b.Data.Context, b.Author)
-			// bc.AddBlock(b.Data)
-			err = sc.Publish("feed", b.Serialize())
+			// validate by attempting to add to blockchain
+			bc := GetBlockchain(b.Data.Context, b.Author)
+			validBlock, err := bc.AddBlock(b)
+			if err != nil {
+				log.Println("\t\t=== received invalid block ===")
+				b.Print()
+				continue
+			}
+			log.Println("\t...received block is valid")
+
+			// if all ok publish to the feed
+			err = sc.Publish("feed", validBlock.Serialize())
 			if err != nil {
 				log.Println("unable to publish message to nss: ", err)
 				break
@@ -99,7 +110,7 @@ func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 			log.Println("...inbound message committed to nss:feed")
 			i++
 			log.Printf("\n\nmessages received from:\n\t%s\n\t%d\n\n", ws.remotePeerID(), i)
-			log.Printf("\n\n%+v\n\n", b)
+			b.Print()
 		}
 		// on any errors return & close nats and stream connections
 		return

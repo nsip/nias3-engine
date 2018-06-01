@@ -3,11 +3,13 @@
 package n3crypto
 
 import (
+	"encoding/hex"
 	"log"
 	"time"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
+	"github.com/pkg/errors"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/nats-io/nuid"
@@ -168,8 +170,39 @@ func (cs *CryptoService) signMessage(data []byte) ([]byte, error) {
 //
 // sign a block
 //
-func (cs *CryptoService) SignBlock(data []byte) ([]byte, error) {
+func (cs *CryptoService) SignBlock(blockData []byte) ([]byte, error) {
 	key := privKey
-	res, err := key.Sign(data)
+	res, err := key.Sign(blockData)
 	return res, err
+}
+
+//
+// verify a signed block was created as author intended
+//
+func (cs *CryptoService) VerifyBlock(blockData []byte, blockAuthor string, blockSig string) (bool, error) {
+
+	// decode block sig from hex
+	sigBytes, err := hex.DecodeString(blockSig)
+	if err != nil {
+		return false, errors.Wrap(err, "cannot hex decode block signature")
+	}
+
+	// // restore peer id binary format from base58 encoded node id data
+	authorId, err := peer.IDB58Decode(blockAuthor)
+	if err != nil {
+		return false, err
+	}
+
+	key, err := authorId.ExtractPublicKey()
+	if err != nil {
+		return false, errors.Wrap(err, "Failed to extract key from block author")
+	}
+
+	res, err := key.Verify(blockData, sigBytes)
+	if err != nil {
+		return false, errors.Wrap(err, "Error authenticating data")
+	}
+
+	return res, nil
+
 }

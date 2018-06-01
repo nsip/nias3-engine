@@ -28,7 +28,7 @@ func NewN3CMS(fileName string) (*N3CMS, error) {
 
 	cms, err := countminsketch.NewFromFile(fileName)
 	if err != nil {
-		log.Println("could not open cms file, will create new.")
+		log.Println("could not create cms from existing file, will create new.")
 	} else {
 		return &N3CMS{cms: cms, fileName: fileName}, nil
 	}
@@ -39,8 +39,6 @@ func NewN3CMS(fileName string) (*N3CMS, error) {
 	}
 
 	n3cms := &N3CMS{cms: cms, fileName: fileName}
-
-	log.Printf("\t New CMS:\n\n%+v\n\n", n3cms)
 
 	return n3cms, nil
 

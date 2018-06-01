@@ -30,10 +30,6 @@ func main() {
 		msgCMS.Close()
 		log.Fatal(err)
 	}
-	log.Printf("\t Existing CMS:\n\n%+v\n\n", msgCMS)
-
-	x := msgCMS.Estimate("blob")
-	log.Println(x)
 
 	// initiate n3 shutdown handler
 	c := make(chan os.Signal, 2)
@@ -48,6 +44,8 @@ func main() {
 
 	// create/open the default blockchain
 	localBlockchain = n3.NewBlockchain("SIF")
+	bi := localBlockchain.Iterator()
+	gb := bi.Next()
 
 	// Parse options from the command line
 	listenF := flag.Int("l", 0, "wait for incoming connections")
@@ -76,33 +74,44 @@ func main() {
 		// create stan connection with test client id
 		sc, err := n3.NSSConnection("testWriter")
 		if err != nil {
-			nss.Stop()
-			log.Fatal("cannot connect to nss for test mesasges: ", err)
+			log.Println("cannot connect to nss for test mesasges: ", err)
+			return
 		}
 		defer sc.Close()
 
-		for x := 0; x < 5; x++ {
-			for i := 0; i < 2; i++ {
+		// always publish the genesis block
+		err = sc.Publish("feed", gb.Serialize())
+		if err != nil {
+			log.Println("cannot publish genesis block to feed: ", err)
+			return
+		}
+
+		for x := 0; x < 1; x++ {
+			for i := 0; i < 5; i++ {
 
 				log.Println("generating test message...")
 
 				// build a tuple
 				t := &n3.SPOTuple{Context: "SIF", Subject: "Subj", Predicate: "Pred", Object: "Obj", Version: uint64(i)}
 				// add it to the blockchain
-				b := localBlockchain.AddBlock(t)
-
+				b, err := localBlockchain.AddNewBlock(t)
+				if err != nil {
+					log.Println("error adding test data block:", err)
+					// break
+				}
+				log.Println("test message is validated")
 				// log.Printf("\t...TestGen\n\n%+v\n\n", b)
 
 				blockBytes := b.Serialize()
 				// _ = blockBytes
-				err := sc.Publish("feed", blockBytes)
+				err = sc.Publish("feed", blockBytes)
 				if err != nil {
 					log.Println("cannot send new block to feed: ", err)
 					break
 				}
 				log.Println("...sent a test message to nss:feed")
 			}
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Second * 1)
 		}
 		log.Println("all test messages sent")
 	}()
