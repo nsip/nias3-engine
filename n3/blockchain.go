@@ -3,7 +3,6 @@
 package n3
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/coreos/bbolt"
@@ -62,9 +61,6 @@ func (bc *Blockchain) AddNewBlock(data *SPOTuple) (*Block, error) {
 		b := usr.Bucket([]byte(blocksBucket))
 		lastHash = string(b.Get([]byte("l")))
 
-		// fmt.Println("lookup a-n-b:")
-		// DeserializeBlock(b.Get([]byte(lastHash))).Print()
-
 		return nil
 	})
 	if err != nil {
@@ -72,7 +68,6 @@ func (bc *Blockchain) AddNewBlock(data *SPOTuple) (*Block, error) {
 	}
 
 	// create the new block as next in chain
-	// log.Println("\t\tlast hash: ", lastHash)
 	newBlock, err := NewBlock(data, lastHash)
 	if err != nil {
 		return nil, errors.Wrap(err, "AddNewBlock error: ")
@@ -131,11 +126,6 @@ func (bc *Blockchain) AddBlock(b *Block) (*Block, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "AddBlock tx error: ")
 	}
-
-	// log.Println("previous:")
-	// prevBlock.Print()
-	// log.Println("new:")
-	// b.Print()
 
 	if prevBlock.Hash != b.PrevBlockHash {
 		return nil, errors.New("attempted to add invalid block: block has no chain.")
@@ -221,7 +211,7 @@ func NewBlockchain(contextName string) *Blockchain {
 		b := usr.Bucket([]byte(blocksBucket))
 
 		if b == nil {
-			fmt.Println("No existing blockchain found. Creating a new one...")
+			log.Println("No existing blockchain found. Creating a new one...")
 			genesis, err := NewGenesisBlock(contextName)
 			if err != nil {
 				return err

@@ -77,10 +77,6 @@ func NewBlock(data *SPOTuple, prevBlockHash string) (*Block, error) {
 	// assign tuple version
 	// assignTupleVersion()
 
-	// // assign author & sender - id from this machine
-	// block.Author = cs.PublicID()
-	// block.Sender = cs.PublicID()
-
 	// assign new hash
 	block.setHash()
 
@@ -163,24 +159,17 @@ func NewGenesisBlock(contextName string) (*Block, error) {
 //
 func (b *Block) Serialize() []byte {
 
-	// log.Printf("\t...Serialize\n\n%+v\n\n", b)
 	out, err := proto.Marshal(b)
 	if err != nil {
 		log.Println("block-serialize: protobuf encoding error: ", err)
 	}
 	return out
 
-	// var result bytes.Buffer
-	// encoder := gob.NewEncoder(&result)
-
-	// err := encoder.Encode(b)
-	// if err != nil {
-	// 	log.Println("gob encoding error: ", err)
-	// }
-
-	// return result.Bytes()
 }
 
+//
+// pretty-print a block
+//
 func (b *Block) Print() {
 	log.Printf(`
 
@@ -216,18 +205,7 @@ func DeserializeBlock(d []byte) *Block {
 	if err != nil {
 		log.Println("block-deserialize: protobuf decoding error: ", err)
 	}
-	// log.Println("\t...Deserialize")
-	// block.Print()
 
 	return block
 
-	// var block Block
-
-	// decoder := gob.NewDecoder(bytes.NewReader(d))
-	// err := decoder.Decode(&block)
-	// if err != nil {
-	// 	log.Println("gob decoding error: ", err)
-	// }
-
-	// return &block
 }

@@ -39,9 +39,6 @@ func (sp *SyncProtocol) handleSyncStream(s net.Stream) {
 	// wrap stream for protobuf exchange
 	ws := WrapStream(s)
 
-	// Create a buffer stream for non blocking read and write.
-	// rw := bufio.NewReadWriter(ws.r, ws.w)
-
 	// go sp.ReadData(ws)
 	err := sp.createInboundReader(ws)
 	if err != nil {
@@ -89,7 +86,7 @@ func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 				log.Printf("\n\nrecieved block failed verification %v\n\n", b)
 				continue
 			}
-			log.Println("...received block is verified")
+			// log.Println("...received block is verified")
 
 			// validate by attempting to add to blockchain
 			bc := GetBlockchain(b.Data.Context, b.Author)
@@ -99,7 +96,7 @@ func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 				b.Print()
 				continue
 			}
-			log.Println("\t...received block is valid")
+			// log.Println("\t...received block is valid")
 
 			// if all ok publish to the feed
 			err = sc.Publish("feed", validBlock.Serialize())
@@ -107,10 +104,10 @@ func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 				log.Println("unable to publish message to nss: ", err)
 				break
 			}
-			log.Println("...inbound message committed to nss:feed")
+			// log.Println("...inbound message committed to nss:feed")
 			i++
-			log.Printf("\n\nmessages received from:\n\t%s\n\t%d\n\n", ws.remotePeerID(), i)
-			b.Print()
+			log.Printf("messages received from:\t%s: %d\n", ws.remotePeerID(), i)
+			// b.Print()
 		}
 		// on any errors return & close nats and stream connections
 		return
@@ -150,14 +147,14 @@ func (sp *SyncProtocol) createOutboundWriter(ws *WrappedStream) error {
 			// don't send if created by the remote peer
 			if blk.Author == ws.remotePeerID() {
 				sendMessage = false
-				log.Println("author is remote peer sendmessage:", sendMessage)
+				// log.Println("author is remote peer sendmessage:", sendMessage)
 			}
 
 			// log.Printf("\n\n\tsender: %s\n\tremote-peer: %s", blk.Sender, ws.remotePeerID())
 			// don't send if it came from the reomote peer
 			if blk.Sender == ws.remotePeerID() {
 				sendMessage = false
-				log.Println("sender is remote peer sendmessage:", sendMessage)
+				// log.Println("sender is remote peer sendmessage:", sendMessage)
 			}
 
 			// don't send if the remote peer has seen it before
@@ -165,7 +162,7 @@ func (sp *SyncProtocol) createOutboundWriter(ws *WrappedStream) error {
 				blk.Receiver = ws.remotePeerID()
 				if sp.node.msgCMS.Estimate(blk.CmsKey()) > 0 {
 					sendMessage = false
-					log.Println("message:", blk.BlockId, " already sent to:", ws.remotePeerID(), " sendmaessage:", sendMessage)
+					// log.Println("message:", blk.BlockId, " already sent to:", ws.remotePeerID(), " sendmaessage:", sendMessage)
 				}
 			}
 
@@ -181,9 +178,6 @@ func (sp *SyncProtocol) createOutboundWriter(ws *WrappedStream) error {
 				sp.node.msgCMS.Update(blk.CmsKey(), 1)
 			}
 
-			// m.Ack()
-			// }, stan.DurableName(ws.remotePeerID()))
-			// }, stan.DurableName(ws.remotePeerID()), stan.SetManualAckMode())
 		}, stan.DeliverAllAvailable())
 		if err != nil {
 			log.Println("error creating feed subscription: ", err)
@@ -198,43 +192,6 @@ func (sp *SyncProtocol) createOutboundWriter(ws *WrappedStream) error {
 	return nil
 }
 
-// //
-// // listen for transmitted blocks
-// // and add them to the local blockchains
-// //
-// func (sp *SyncProtocol) ReadData(ws *WrappedStream) {
-
-// 	// for _, ws := range sp.connectedPeers {
-// 	// if !ws.stream.Conn .IsClosed() {
-// 	go func() {
-// 		for {
-// 			log.Println("reader open for: ", ws.peerID)
-// 			b, err := receiveBlock(ws)
-// 			if err != nil {
-// 				log.Println("read-block error: ", err)
-// 				break
-// 				// continue
-// 			}
-
-// 			log.Println("...got a message from: ", ws.peerID)
-
-// 			if !b.Verify() {
-// 				log.Println("recieved block failed verification %v", b)
-// 				continue
-// 			}
-
-// 			bc := GetBlockchain(b.Data.Context, b.Author)
-// 			bc.AddBlock(b.Data)
-
-// 		}
-// 		// on errors reading remove peer
-// 		// sp.removePeer(pid)
-// 		return
-// 	}()
-// 	// }
-// 	// }
-// }
-
 //
 // handles reading a block from the provided stream
 //
@@ -246,51 +203,6 @@ func receiveBlock(ws *WrappedStream) (*Block, error) {
 	}
 	return &block, nil
 }
-
-//
-// send block data to peers
-//
-// func (sp *SyncProtocol) WriteData(ws *WrappedStream) {
-
-// go func() {
-// 	for {
-// 		time.Sleep(5 * time.Second)
-// 		mutex.Lock()
-// 		bytes, err := json.Marshal(Blockchain)
-// 		if err != nil {
-// 			log.Println(err)
-// 		}
-// 		mutex.Unlock()
-
-// 		mutex.Lock()
-// 		rw.WriteString(fmt.Sprintf("%s\n", string(bytes)))
-// 		rw.Flush()
-// 		mutex.Unlock()
-
-// 	}
-// }()
-
-//
-// change for channel reader
-//
-// stdReader := bufio.NewReader(os.Stdin)
-
-// for {
-
-// 	b := <-sp.node.BlockChan
-// 	log.Println("...block received for writing ")
-// 	err := sendBlock(b, ws)
-// 	if err != nil {
-// 		log.Println("bad block:\n\n%v\n\n", b)
-// 		log.Println("unable to write block to stream: ", err)
-// 		break
-// 	}
-
-// 	// maybe also write tuple to feed
-
-// }
-
-// }
 
 //
 // sendBlock encodes and writes a data-message to the outbound stream

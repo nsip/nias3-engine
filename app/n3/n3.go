@@ -15,6 +15,13 @@ var localBlockchain *n3.Blockchain
 
 func main() {
 
+	// Parse options from the command line
+	listenF := flag.Int("l", 0, "wait for incoming connections")
+	target := flag.String("d", "", "target peer to dial")
+	context := flag.String("c", "SIF", "blockchain context")
+	inet := flag.Bool("inet", false, "turn on node p2p access to external network")
+	flag.Parse()
+
 	// start the streaming server
 	nss := n3.NewNSS()
 	err := nss.Start()
@@ -24,6 +31,14 @@ func main() {
 	}
 	defer nss.Stop()
 
+	// create stan connection for writing to feed
+	sc, err := n3.NSSConnection("n3main")
+	if err != nil {
+		log.Println("cannot connect to nss: ", err)
+		return
+	}
+	defer sc.Close()
+
 	// create the message-dedupe count min sketch
 	msgCMS, err := n3.NewN3CMS("./msgs.cms")
 	if err != nil {
@@ -31,26 +46,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// initiate n3 shutdown handler
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		nss.Stop()
-		msgCMS.Close()
-		log.Println("n3 shutdown complete")
-		os.Exit(1)
-	}()
-
 	// create/open the default blockchain
-	localBlockchain = n3.NewBlockchain("SIF")
-	bi := localBlockchain.Iterator()
-	gb := bi.Next()
+	localBlockchain = n3.NewBlockchain(*context)
 
-	// Parse options from the command line
-	listenF := flag.Int("l", 0, "wait for incoming connections")
-	target := flag.String("d", "", "target peer to dial")
-	flag.Parse()
+	// if truly new, commit the genesis block to the feed
+	bi := localBlockchain.Iterator()
+	b := bi.Next()
+	if b.Data.Subject == "Genesis" {
+		err := sc.Publish("feed", b.Serialize())
+		if err != nil {
+			log.Println("cannot commit gnensis block to feed: ", err)
+		} else {
+			log.Println("genesis block committed to feed")
+		}
+	}
 
 	if *listenF == 0 {
 		log.Fatal("Please provide a port to bind on with -l")
@@ -58,33 +67,18 @@ func main() {
 
 	log.Println("starting p2p node")
 
-	// Make a node that listens on the given multiaddress
-	node := n3.NewNode(*listenF, msgCMS)
+	// Make a node that listens on the given port for multiaddress:
+	// will listen on all local network interfaces
+	// if --inet then will also connect to external interface
+	node := n3.NewNode(*listenF, *inet, msgCMS)
 
 	// connect to remote peer if supplied
 	if *target != "" {
 		node.ConnectToPeer(*target)
 	}
 
-	// time.Sleep(time.Second * 5)
-
-	// generate test messages
+	// generate some test messages
 	go func() {
-		log.Println("creating feed topic")
-		// create stan connection with test client id
-		sc, err := n3.NSSConnection("testWriter")
-		if err != nil {
-			log.Println("cannot connect to nss for test mesasges: ", err)
-			return
-		}
-		defer sc.Close()
-
-		// always publish the genesis block
-		err = sc.Publish("feed", gb.Serialize())
-		if err != nil {
-			log.Println("cannot publish genesis block to feed: ", err)
-			return
-		}
 
 		for x := 0; x < 1; x++ {
 			for i := 0; i < 5; i++ {
@@ -100,7 +94,6 @@ func main() {
 					// break
 				}
 				log.Println("test message is validated")
-				// log.Printf("\t...TestGen\n\n%+v\n\n", b)
 
 				blockBytes := b.Serialize()
 				// _ = blockBytes
@@ -116,5 +109,17 @@ func main() {
 		log.Println("all test messages sent")
 	}()
 
+	// initiate n3 shutdown handler
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		nss.Stop()
+		msgCMS.Close()
+		log.Println("n3 shutdown complete")
+		os.Exit(1)
+	}()
+
+	// wait for shutdown
 	select {}
 }
