@@ -82,9 +82,6 @@ func NewBlock(data *SPOTuple, prevBlockHash string) (*Block, error) {
 		Sender:        cs.PublicID(),
 	}
 
-	// assign tuple version
-	// assignTupleVersion()
-
 	// assign new hash
 	block.setHash()
 

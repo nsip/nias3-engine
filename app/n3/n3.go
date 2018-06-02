@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	n3 "github.com/nsip/nias3-engine/n3"
 )
@@ -20,6 +19,7 @@ func main() {
 	target := flag.String("d", "", "target peer to dial")
 	context := flag.String("c", "SIF", "blockchain context")
 	inet := flag.Bool("inet", false, "turn on node p2p access to external network")
+	webPort := flag.Int("webport", 1340, "port to run web handler on")
 	flag.Parse()
 
 	// start the streaming server
@@ -77,36 +77,8 @@ func main() {
 		node.ConnectToPeer(*target)
 	}
 
-	// generate some test messages
-	go func() {
-
-		for x := 0; x < 1; x++ {
-			for i := 0; i < 5; i++ {
-
-				log.Println("generating test message...")
-
-				// build a tuple
-				t := &n3.SPOTuple{Context: "SIF", Subject: "Subj", Predicate: "Pred", Object: "Obj", Version: uint64(i)}
-				// add it to the blockchain
-				b, err := localBlockchain.AddNewBlock(t)
-				if err != nil {
-					log.Println("error adding test data block:", err)
-					// break
-				}
-				log.Println("test message is validated")
-
-				blockBytes := b.Serialize()
-				err = sc.Publish("feed", blockBytes)
-				if err != nil {
-					log.Println("cannot send new block to feed: ", err)
-					break
-				}
-				log.Println("...sent a test message to nss:feed")
-			}
-			time.Sleep(time.Second * 1)
-		}
-		log.Println("all test messages sent")
-	}()
+	// start the webserver
+	go n3.RunWebserver(*webPort, localBlockchain)
 
 	// initiate n3 shutdown handler
 	c := make(chan os.Signal, 2)
