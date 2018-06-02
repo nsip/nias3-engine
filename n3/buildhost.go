@@ -26,7 +26,7 @@ var hostPrivKey crypto.PrivKey
 
 // makeRoutedHost creates a LibP2P host listening on the
 // given multiaddress. It will bootstrap using the
-// provided PeerInfos to find nodes via ipfs discovery
+// provided PeerInfos to find nodes via ipfs discovery if --inet is true
 func makeRoutedHost(listenPort int, bootstrapPeers []pstore.PeerInfo, inet bool) (host.Host, error) {
 
 	if hostPrivKey == nil {
@@ -95,23 +95,19 @@ func makeRoutedHost(listenPort int, bootstrapPeers []pstore.PeerInfo, inet bool)
 
 	// Build host multiaddress
 	hostAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", routedHost.ID().Pretty()))
-	// hostAddr, err := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", basicHost.ID().Pretty()))
 	if err != nil {
 		log.Println("multiaddr error: ", err)
 	}
 
 	// Now we can build a full multiaddress to reach this host
 	// by encapsulating both addresses:
-	// addr := routedHost.Addrs()[0]
 	addrs := routedHost.Addrs()
-	// addrs := basicHost.Addrs()
 	log.Println("I can be reached at:")
 	for _, addr := range addrs {
 		log.Println(addr.Encapsulate(hostAddr))
 	}
 
 	log.Println("Now run \"./n3 --l [port] --d [one of my addresses]\" on a different terminal")
-	// log.Printf("Now run \"./n3 -d %s%s\" on a different terminal\n", basicHost.ID().Pretty(), globalFlag)
 
 	// return routedHost, nil
 	return basicHost, nil

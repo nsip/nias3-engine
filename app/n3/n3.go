@@ -96,7 +96,6 @@ func main() {
 				log.Println("test message is validated")
 
 				blockBytes := b.Serialize()
-				// _ = blockBytes
 				err = sc.Publish("feed", blockBytes)
 				if err != nil {
 					log.Println("cannot send new block to feed: ", err)
@@ -116,6 +115,7 @@ func main() {
 		<-c
 		nss.Stop()
 		msgCMS.Close()
+		localBlockchain.Close()
 		log.Println("n3 shutdown complete")
 		os.Exit(1)
 	}()

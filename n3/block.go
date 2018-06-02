@@ -49,6 +49,14 @@ func (t *SPOTuple) Bytes() []byte {
 }
 
 //
+// helper method provides lookup key for use with
+// count-min-sketch for tuple versioning
+//
+func (t *SPOTuple) CmsKey() string {
+	return fmt.Sprintf("%s:%s:%s:%s", t.Context, t.Subject, t.Predicate, t.Object)
+}
+
+//
 // check signature against author & content
 //
 func (b *Block) Verify() bool {

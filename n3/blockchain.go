@@ -32,6 +32,7 @@ type Blockchain struct {
 	author  string
 	tip     []byte
 	db      *bolt.DB
+	cms     *N3CMS // manages tuple versioning for this b/c
 }
 
 // BlockchainIterator is used to iterate over blockchain blocks
@@ -67,11 +68,24 @@ func (bc *Blockchain) AddNewBlock(data *SPOTuple) (*Block, error) {
 		return nil, errors.Wrap(err, "AddNewBlock error: ")
 	}
 
+	// assign data tuple version within this b/c context
+	cmsKey := data.CmsKey()
+	knownVer := bc.cms.Estimate(cmsKey)
+	if knownVer > 0 {
+		nextVer := knownVer + 1
+		data.Version = nextVer
+		bc.cms.Update(cmsKey, 1)
+	} else {
+		data.Version = 1
+		bc.cms.Update(cmsKey, 1)
+	}
+
 	// create the new block as next in chain
 	newBlock, err := NewBlock(data, lastHash)
 	if err != nil {
 		return nil, errors.Wrap(err, "AddNewBlock error: ")
 	}
+	// log.Printf("\n\ttuple: %+v\n\tversion:%d\n", newBlock.Data, newBlock.Data.Version)
 
 	// add the block to the chain
 	addedBlock, err := bc.AddBlock(newBlock)
@@ -192,6 +206,14 @@ func (i *BlockchainIterator) Next() *Block {
 }
 
 //
+// cleanly tidy up any sstateful resources
+//
+func (bc *Blockchain) Close() {
+	bc.db.Close()
+	bc.cms.Close()
+}
+
+//
 // NewBlockchain creates a new Blockchain with genesis Block
 // for the current owner with the specified context
 //
@@ -199,6 +221,12 @@ func NewBlockchain(contextName string) *Blockchain {
 	var tip []byte
 	db := boltDB
 	author := cs.PublicID()
+
+	fileName := "./" + contextName + ".cms"
+	cms, cmsErr := NewN3CMS(fileName)
+	if cmsErr != nil {
+		log.Fatal("unable to create b/c version cms: ", cmsErr)
+	}
 
 	err := db.Update(func(tx *bolt.Tx) error {
 
@@ -243,10 +271,13 @@ func NewBlockchain(contextName string) *Blockchain {
 		log.Panic(err)
 	}
 
-	bc := Blockchain{context: contextName,
-		author: author,
-		tip:    tip,
-		db:     db}
+	bc := Blockchain{
+		context: contextName,
+		author:  author,
+		tip:     tip,
+		db:      db,
+		cms:     cms,
+	}
 
 	return &bc
 }
@@ -279,10 +310,12 @@ func GetBlockchain(contextName string, author string) *Blockchain {
 		log.Panic(err)
 	}
 
-	bc := &Blockchain{context: contextName,
-		author: author,
-		tip:    tip,
-		db:     db}
+	bc := &Blockchain{
+		context: contextName,
+		author:  author,
+		tip:     tip,
+		db:      db,
+	}
 
 	return bc
 
