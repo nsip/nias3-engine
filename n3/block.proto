@@ -1,0 +1,25 @@
+// block.proto
+
+syntax = "proto3";
+
+package n3;
+
+// core message type for lowest-level data tuples
+message SPOTuple {
+	string Subject = 1; 	//e.g. Refid of a SIF object
+	string Object = 2; 		//e.g. Attribute name of a SIF object
+	string Predicate = 3; 	//e.g Value of an attribute
+	uint64 Version = 4; 	//latest known version of this tuple
+	string Context = 5;		//model/domain context for this tuple
+}
+
+message Block {
+	string 		BlockId =1;
+	SPOTuple	Data = 2;
+	string 		PrevBlockHash = 3;
+	string 		Hash = 4;
+	string 		Sig = 5;
+	string 		Author = 6;
+	string		Sender = 7;
+	string 		Receiver = 8;
+}

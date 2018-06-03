@@ -4,3 +4,9 @@
 /app/n33
 /app/n32
 *.key
+*.db
+*.cms
+*.db
+*.db
+app/n3/n3.db
+*.db
