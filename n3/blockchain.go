@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const dbFile = "blockchain.db"
 const blocksBucket = "blocks"
 const contextsBucket = "contexts"
 
@@ -18,10 +17,9 @@ var boltDB *bolt.DB
 func init() {
 	if boltDB == nil {
 		var dbErr error
-		dbPath := "./n3.db"
 		boltDB, dbErr = bolt.Open("n3.db", 0600, nil)
 		if dbErr != nil {
-			log.Fatal(errors.Wrap(dbErr, "cannot open n3 datastore "+dbPath))
+			log.Fatal(errors.Wrap(dbErr, "cannot open n3 blockchain datastore."))
 		}
 	}
 }

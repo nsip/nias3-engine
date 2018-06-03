@@ -78,7 +78,16 @@ func main() {
 	}
 
 	// start the webserver
+	log.Println("starting webserver")
 	go n3.RunWebserver(*webPort, localBlockchain)
+
+	// start the hexastore
+	log.Println("starting hexastore")
+	hexa := n3.NewHexastore()
+	err = hexa.ConnectToFeed()
+	if err != nil {
+		log.Fatal("cannot connect hexastore to feed")
+	}
 
 	// initiate n3 shutdown handler
 	c := make(chan os.Signal, 2)
@@ -88,6 +97,7 @@ func main() {
 		nss.Stop()
 		msgCMS.Close()
 		localBlockchain.Close()
+		hexa.Close()
 		log.Println("n3 shutdown complete")
 		os.Exit(1)
 	}()

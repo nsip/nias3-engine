@@ -57,6 +57,35 @@ func (t *SPOTuple) CmsKey() string {
 }
 
 //
+// helper for proto encoding
+//
+func (t *SPOTuple) Serialize() []byte {
+
+	out, err := proto.Marshal(t)
+	if err != nil {
+		log.Println("tuple-serialize: protobuf encoding error: ", err)
+	}
+	return out
+
+}
+
+//
+// helper for proto decoding
+//
+func DeserializeTuple(d []byte) *SPOTuple {
+
+	tuple := &SPOTuple{}
+
+	err := proto.Unmarshal(d, tuple)
+	if err != nil {
+		log.Println("tuple-deserialize: protobuf decoding error: ", err)
+	}
+
+	return tuple
+
+}
+
+//
 // check signature against author & content
 //
 func (b *Block) Verify() bool {
