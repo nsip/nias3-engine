@@ -10,3 +10,7 @@
 *.db
 app/n3/n3.db
 *.db
+.DS_Store
+._.DS_Store
+**/.DS_Store
+**/._.DS_Store
