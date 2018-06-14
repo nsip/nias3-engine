@@ -77,10 +77,6 @@ func main() {
 		node.ConnectToPeer(*target)
 	}
 
-	// start the webserver
-	log.Println("starting webserver")
-	go n3.RunWebserver(*webPort, localBlockchain)
-
 	// start the hexastore
 	log.Println("starting hexastore")
 	hexa := n3.NewHexastore()
@@ -88,6 +84,10 @@ func main() {
 	if err != nil {
 		log.Fatal("cannot connect hexastore to feed")
 	}
+
+	// start the webserver
+	log.Println("starting webserver")
+	go n3.RunWebserver(*webPort, localBlockchain, hexa)
 
 	// initiate n3 shutdown handler
 	c := make(chan os.Signal, 2)

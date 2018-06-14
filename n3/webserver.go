@@ -3,6 +3,7 @@
 package n3
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 	"github.com/labstack/echo/middleware"
 )
 
-func RunWebserver(webPort int, localBlockchain *Blockchain) {
+func RunWebserver(webPort int, localBlockchain *Blockchain, hexastore *Hexastore) {
 
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3web")
@@ -53,6 +54,40 @@ func RunWebserver(webPort int, localBlockchain *Blockchain) {
 
 		return c.JSON(http.StatusOK, t)
 
+	})
+
+	e.GET("/HasKey/:key", func(c echo.Context) error {
+		key := c.Param("key")
+		has, err := hexastore.HasKey(key)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		//c.Response().Header().Set("Content-Type", "application/xml")
+		if has {
+			c.String(http.StatusOK, "true")
+		} else {
+			c.String(http.StatusNotFound, "false")
+		}
+		return nil
+	})
+
+	e.GET("/tuple/:key", func(c echo.Context) error {
+		key := c.Param("key")
+		tuples, err := hexastore.GetTuples(key)
+		log.Printf("%+v\n", tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.Response().Header().Set("Content-Type", "application/json")
+		ret, err := json.Marshal(tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.String(http.StatusOK, string(ret))
+		return nil
 	})
 
 	// Start server

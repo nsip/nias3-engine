@@ -14,6 +14,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
+	"text/scanner"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/nuid"
@@ -44,16 +47,46 @@ var cs = n3crypto.NewCryptoService()
 // 	Version   uint64
 // }
 
+// We quote the components of both the tuple and the key, to prevent ambiguity
 func (t *SPOTuple) Bytes() []byte {
-	return []byte(fmt.Sprintf("%s:%s:%s:%s:%d", t.Context, t.Subject, t.Predicate, t.Object, t.Version))
+	return []byte(fmt.Sprintf("%s:%s:%s:%s:%d", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object), t.Version))
 }
 
 //
 // helper method provides lookup key for use with
 // count-min-sketch for tuple versioning
 //
+// This key is SPO
 func (t *SPOTuple) CmsKey() string {
-	return fmt.Sprintf("%s:%s:%s:%s", t.Context, t.Subject, t.Predicate, t.Object)
+	return fmt.Sprintf("c:%s s:%s p:%s o:%s", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object))
+}
+
+func (t *SPOTuple) CmsKeySP() string {
+	return fmt.Sprintf("c:%s s:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate))
+}
+
+func (t *SPOTuple) CmsKeySPO() string {
+	return fmt.Sprintf("c:%s s:%s p:%s o:%s", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object))
+}
+
+func (t *SPOTuple) CmsKeySOP() string {
+	return fmt.Sprintf("c:%s s:%s o:%s p:%s", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Object), strconv.Quote(t.Predicate))
+}
+
+func (t *SPOTuple) CmsKeyPSO() string {
+	return fmt.Sprintf("c:%s p:%s s:%s o:%s", strconv.Quote(t.Context), strconv.Quote(t.Predicate), strconv.Quote(t.Subject), strconv.Quote(t.Object))
+}
+
+func (t *SPOTuple) CmsKeyPOS() string {
+	return fmt.Sprintf("c:%s p:%s o:%s s:%s", strconv.Quote(t.Context), strconv.Quote(t.Predicate), strconv.Quote(t.Object), strconv.Quote(t.Subject))
+}
+
+func (t *SPOTuple) CmsKeyOPS() string {
+	return fmt.Sprintf("c:%s s:%s o:%s p:%s", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Predicate), strconv.Quote(t.Subject))
+}
+
+func (t *SPOTuple) CmsKeyOSP() string {
+	return fmt.Sprintf("c:%s s:%s o:%s p:%s", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Subject), strconv.Quote(t.Predicate))
 }
 
 //
@@ -199,6 +232,36 @@ func (b *Block) Serialize() []byte {
 	}
 	return out
 
+}
+
+// parse a tuple key into a triple
+func ParseTripleKey(t []byte) SPOTuple {
+	var s scanner.Scanner
+	s.Init(strings.NewReader(string(t)))
+	o := SPOTuple{}
+	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
+		if s.TokenText() == "c" {
+			tok = s.Scan() // colon
+			tok = s.Scan()
+			o.Context, _ = strconv.Unquote(s.TokenText())
+		}
+		if s.TokenText() == "s" {
+			tok = s.Scan() // colon
+			tok = s.Scan()
+			o.Subject, _ = strconv.Unquote(s.TokenText())
+		}
+		if s.TokenText() == "p" {
+			tok = s.Scan() // colon
+			tok = s.Scan()
+			o.Predicate, _ = strconv.Unquote(s.TokenText())
+		}
+		if s.TokenText() == "o" {
+			tok = s.Scan() // colon
+			tok = s.Scan()
+			o.Object, _ = strconv.Unquote(s.TokenText())
+		}
+	}
+	return o
 }
 
 //
