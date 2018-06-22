@@ -113,8 +113,9 @@ func (hx *Hexastore) ConnectToFeed() error {
 		defer close(errc)
 		defer sc.Close()
 		defer hexaCMS.Close()
+		// TODO : context.Context, to persist CMS when engine crashes
 
-		// main message hndling routine
+		// main message handling routine
 		sub, err := sc.Subscribe("feed", func(m *stan.Msg) {
 
 			commitTuple := false
@@ -152,33 +153,14 @@ func (hx *Hexastore) ConnectToFeed() error {
 				// if there is one do the necessary comparison
 				if lastEntryBytes != nil {
 					lastEntry = DeserializeTuple(lastEntryBytes)
-					// check object legths
-					// TODO: Matt, what is this for?
-					/*
-						if t.Object > lastEntry.Object {
-							commitTuple = true
-						}
-					*/
+					// check object legths: arbitrary lexical ordering for colliding tuples with
+					// identical version number, as done in gunDB
+					if t.Object > lastEntry.Object {
+						commitTuple = true
+					}
 					commitTuple = true
 				}
 			}
-
-			/*
-				if commitTuple {
-					// look up previous entry (for real, in the hexastore and not the Bloom filter)
-					if lastEntry == nil {
-						lastEntryBytes, err := hx.GetFirstMatching([]byte(t.CmsKeySP()))
-						if err == nil && lastEntryBytes != nil {
-							lastEntry = DeserializeTuple(lastEntryBytes)
-						} else {
-							if err == nil {
-								err = errors.New("nothing stored against key")
-							}
-						}
-					}
-				}
-				commitTuple = lastEntry == nil || t.Object != lastEntry.Object
-			*/
 
 			if commitTuple {
 				err = hx.db.Update(func(tx *bolt.Tx) error {
@@ -192,7 +174,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 						deleted := lastEntry.Tombstone()
 						// log.Printf("tombstone tuple: %+v", deleted)
 						// tombstone the old entry with a different subject
-						if err = bkt.Store(deleted, lastEntry); err != nil {
+						if err = bkt.StoreSingleKey(deleted, deleted); err != nil {
 							return err
 						}
 						// delete the old entry
@@ -208,6 +190,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 				}
 				// register the current known version
 				hexaCMS.Update(cmsKey, (tVer - lastVer))
+				// TODO: Matt, you're storing tVer - lastVer in the CMS, but comparing that value with tVer; is that correct?
 				// log.Printf("committed tuple: %+v", t)
 			} else {
 				log.Printf("not committing tuple: %+v", t)
@@ -254,6 +237,17 @@ func (bkt *HexaBucket) Store(t *SPOTuple, k *SPOTuple) error {
 		return err
 	}
 	if err = bkt.Put([]byte(k.CmsKeySP()), payload); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Store tuple t in Hexastore, under only the SPO key of k.
+// presupposes hx.db.Update already running
+func (bkt *HexaBucket) StoreSingleKey(t *SPOTuple, k *SPOTuple) error {
+	var err error
+	payload := t.Serialize()
+	if err = bkt.Put([]byte(k.CmsKeySPO()), payload); err != nil {
 		return err
 	}
 	return nil

@@ -32,12 +32,13 @@ func RunWebserver(webPort int, localBlockchain *Blockchain, hexastore *Hexastore
 	// Route => handler
 	e.POST("/tuple", func(c echo.Context) error {
 
-		// unpack tuple from paylaod
+		// unpack tuple from payload
 		t := new(SPOTuple)
 		if err = c.Bind(t); err != nil {
 			return err
 		}
 
+		// TODO this should be writing to the stream, not the sigchain
 		// add to the blockchain
 		b, err := localBlockchain.AddNewBlock(t)
 		if err != nil {
@@ -63,7 +64,6 @@ func RunWebserver(webPort int, localBlockchain *Blockchain, hexastore *Hexastore
 			c.String(http.StatusBadRequest, err.Error())
 			return err
 		}
-		//c.Response().Header().Set("Content-Type", "application/xml")
 		if has {
 			c.String(http.StatusOK, "true")
 		} else {

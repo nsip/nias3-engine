@@ -55,10 +55,12 @@ func (t *SPOTuple) Bytes() []byte {
 //
 // helper method provides lookup key for use with
 // count-min-sketch for tuple versioning
-//
+
+// All keys quote their values, to avoid ambiguity with space as a key part delimiter, and terminate in space, so that a third key component prefix can be differentiated from a complete third key component value
+
 // This key is SPO
 func (t *SPOTuple) CmsKey() string {
-	return fmt.Sprintf("c:%s s:%s p:%s o:%s", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object))
+	return fmt.Sprintf("c:%s s:%s p:%s o:%s ", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object))
 }
 
 func (t *SPOTuple) CmsKeySP() string {
@@ -66,27 +68,27 @@ func (t *SPOTuple) CmsKeySP() string {
 }
 
 func (t *SPOTuple) CmsKeySPO() string {
-	return fmt.Sprintf("c:%s s:%s p:%s o:%s", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object))
+	return fmt.Sprintf("c:%s s:%s p:%s o:%s ", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Predicate), strconv.Quote(t.Object))
 }
 
 func (t *SPOTuple) CmsKeySOP() string {
-	return fmt.Sprintf("c:%s s:%s o:%s p:%s", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Object), strconv.Quote(t.Predicate))
+	return fmt.Sprintf("c:%s s:%s o:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Subject), strconv.Quote(t.Object), strconv.Quote(t.Predicate))
 }
 
 func (t *SPOTuple) CmsKeyPSO() string {
-	return fmt.Sprintf("c:%s p:%s s:%s o:%s", strconv.Quote(t.Context), strconv.Quote(t.Predicate), strconv.Quote(t.Subject), strconv.Quote(t.Object))
+	return fmt.Sprintf("c:%s p:%s s:%s o:%s ", strconv.Quote(t.Context), strconv.Quote(t.Predicate), strconv.Quote(t.Subject), strconv.Quote(t.Object))
 }
 
 func (t *SPOTuple) CmsKeyPOS() string {
-	return fmt.Sprintf("c:%s p:%s o:%s s:%s", strconv.Quote(t.Context), strconv.Quote(t.Predicate), strconv.Quote(t.Object), strconv.Quote(t.Subject))
+	return fmt.Sprintf("c:%s p:%s o:%s s:%s ", strconv.Quote(t.Context), strconv.Quote(t.Predicate), strconv.Quote(t.Object), strconv.Quote(t.Subject))
 }
 
 func (t *SPOTuple) CmsKeyOPS() string {
-	return fmt.Sprintf("c:%s s:%s o:%s p:%s", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Predicate), strconv.Quote(t.Subject))
+	return fmt.Sprintf("c:%s s:%s o:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Predicate), strconv.Quote(t.Subject))
 }
 
 func (t *SPOTuple) CmsKeyOSP() string {
-	return fmt.Sprintf("c:%s s:%s o:%s p:%s", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Subject), strconv.Quote(t.Predicate))
+	return fmt.Sprintf("c:%s s:%s o:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Subject), strconv.Quote(t.Predicate))
 }
 
 //
