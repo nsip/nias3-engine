@@ -22,8 +22,36 @@ func main() {
 	webPort := flag.Int("webport", 1340, "port to run web handler on")
 	flag.Parse()
 
+	var nss *n3.NSS
+	var msgCMS *n3.N3CMS
+	var localBlockchain *n3.Blockchain
+	var hexa *n3.Hexastore
+
+	// initiate n3 shutdown handler
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGHUP,
+		syscall.SIGINT, syscall.SIGILL, syscall.SIGABRT, syscall.SIGEMT, syscall.SIGSYS)
+
+	go func() {
+		<-c
+		if nss != nil {
+			nss.Stop()
+		}
+		if msgCMS != nil {
+			msgCMS.Close()
+		}
+		if localBlockchain != nil {
+			localBlockchain.Close()
+		}
+		if hexa != nil {
+			hexa.Close()
+		}
+		log.Println("n3 shutdown complete")
+		os.Exit(1)
+	}()
+
 	// start the streaming server
-	nss := n3.NewNSS()
+	nss = n3.NewNSS()
 	err := nss.Start()
 	if err != nil {
 		nss.Stop()
@@ -39,13 +67,15 @@ func main() {
 	}
 	defer sc.Close()
 
+	log.Println("starting Count-Minsketch")
 	// create the message-dedupe count min sketch
-	msgCMS, err := n3.NewN3CMS("./msgs.cms")
+	msgCMS, err = n3.NewN3CMS("./msgs.cms")
 	if err != nil {
 		msgCMS.Close()
 		log.Fatal(err)
 	}
 
+	log.Println("starting Sigchain")
 	// create/open the default blockchain
 	localBlockchain = n3.NewBlockchain(*context)
 
@@ -79,7 +109,7 @@ func main() {
 
 	// start the hexastore
 	log.Println("starting hexastore")
-	hexa := n3.NewHexastore()
+	hexa = n3.NewHexastore()
 	err = hexa.ConnectToFeed()
 	if err != nil {
 		log.Fatal("cannot connect hexastore to feed")
@@ -88,19 +118,6 @@ func main() {
 	// start the webserver
 	log.Println("starting webserver")
 	go n3.RunWebserver(*webPort, localBlockchain, hexa)
-
-	// initiate n3 shutdown handler
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		nss.Stop()
-		msgCMS.Close()
-		localBlockchain.Close()
-		hexa.Close()
-		log.Println("n3 shutdown complete")
-		os.Exit(1)
-	}()
 
 	// wait for shutdown
 	select {}
