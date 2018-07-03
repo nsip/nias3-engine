@@ -59,6 +59,7 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 
 	e.GET("/HasKey/:key", func(c echo.Context) error {
 		key := c.Param("key")
+		log.Printf("Has key: %s\n", key)
 		has, err := hexastore.HasKey(key)
 		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())

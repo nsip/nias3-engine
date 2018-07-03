@@ -114,7 +114,6 @@ func (hx *Hexastore) ConnectToFeed() error {
 		defer close(errc)
 		defer sc.Close()
 		defer hexaCMS.Close()
-		// TODO : context.Context, to persist CMS when engine crashes
 
 		// main message handling routine
 		sub, err := sc.Subscribe("feed", func(m *stan.Msg) {
@@ -131,6 +130,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 			cmsKey := t.CmsKeySP()
 			tVer := t.Version
 			lastVer := hexaCMS.Estimate(cmsKey)
+			log.Printf("tver %d lastVer %d\n", tVer, lastVer)
 			var lastEntry *SPOTuple
 			lastEntry = nil
 
@@ -172,6 +172,14 @@ func (hx *Hexastore) ConnectToFeed() error {
 					// TODO: Track empty objects (which are used for deletion of SPO), and compact them:
 					// remove all permutations of keys pointing to empty objects
 
+					if lastVer < tVer && lastVer > 0 && lastEntry == nil {
+						// there is potentially a previous entry to be deleted
+						lastEntryBytes := bkt.Get([]byte(cmsKey))
+						if lastEntryBytes != nil {
+							lastEntry = DeserializeTuple(lastEntryBytes)
+						}
+					}
+
 					if lastEntry != nil {
 						deleted := lastEntry.Tombstone()
 						// log.Printf("tombstone tuple: %+v", deleted)
@@ -191,11 +199,15 @@ func (hx *Hexastore) ConnectToFeed() error {
 					errc <- errors.Wrap(err, "unable to update hexastore")
 				}
 				// register the current known version
-				hexaCMS.Update(cmsKey, (tVer - lastVer))
+				// hexaCMS.Update(cmsKey, (tVer - lastVer))
 				// TODO: Matt, you're storing tVer - lastVer in the CMS, but comparing that value with tVer; is that correct?
+				hexaCMS.Update(cmsKey, tVer)
 				// log.Printf("committed tuple: %+v", t)
 			} else {
-				log.Printf("not committing tuple: %+v; version %d, previous entry Object: %s", t, lastVer, strconv.Quote(lastEntry.Object))
+				log.Printf("not committing tuple: %+v; version %d", t, lastVer)
+				if lastEntry != nil {
+					log.Printf(" previous entry Object: %s\n", strconv.Quote(lastEntry.Object))
+				}
 			}
 
 		}, stan.DeliverAllAvailable())

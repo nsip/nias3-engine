@@ -70,7 +70,7 @@ func (bc *Blockchain) AddNewBlock(data *SPOTuple) (*Block, error) {
 	}
 
 	// assign data tuple version within this b/c context
-	cmsKey := data.CmsKey()
+	cmsKey := data.CmsKeySP()
 	knownVer := bc.cms.Estimate(cmsKey)
 	if knownVer > 0 {
 		nextVer := knownVer + 1
