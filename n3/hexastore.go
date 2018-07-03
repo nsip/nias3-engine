@@ -7,6 +7,7 @@ import (
 	//"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/coreos/bbolt"
@@ -194,7 +195,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 				// TODO: Matt, you're storing tVer - lastVer in the CMS, but comparing that value with tVer; is that correct?
 				// log.Printf("committed tuple: %+v", t)
 			} else {
-				log.Printf("not committing tuple: %+v; version %s, previous entry Object %s", t, lastVer, lastEntry.Object)
+				log.Printf("not committing tuple: %+v; version %d, previous entry Object: %s", t, lastVer, strconv.Quote(lastEntry.Object))
 			}
 
 		}, stan.DeliverAllAvailable())

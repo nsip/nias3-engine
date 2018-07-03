@@ -14,6 +14,8 @@ const contextsBucket = "contexts"
 
 var boltDB *bolt.DB
 
+var localCMSStore map[string]*N3CMS
+
 func init() {
 	if boltDB == nil {
 		var dbErr error
@@ -22,6 +24,7 @@ func init() {
 			log.Fatal(errors.Wrap(dbErr, "cannot open n3 blockchain datastore."))
 		}
 	}
+	localCMSStore = make(map[string]*N3CMS)
 }
 
 // Blockchain keeps a sequence of Blocks
@@ -204,7 +207,7 @@ func (i *BlockchainIterator) Next() *Block {
 }
 
 //
-// cleanly tidy up any sstateful resources
+// cleanly tidy up any stateful resources
 //
 func (bc *Blockchain) Close() {
 	bc.db.Close()
@@ -225,6 +228,7 @@ func NewBlockchain(contextName string) *Blockchain {
 	if cmsErr != nil {
 		log.Fatal("unable to create b/c version cms: ", cmsErr)
 	}
+	localCMSStore[contextName] = cms
 
 	err := db.Update(func(tx *bolt.Tx) error {
 
@@ -308,11 +312,17 @@ func GetBlockchain(contextName string, author string) *Blockchain {
 		log.Panic(err)
 	}
 
+	cms := localCMSStore[contextName]
+	if author != cs.PublicID() {
+		cms = nil
+	}
+
 	bc := &Blockchain{
 		context: contextName,
 		author:  author,
 		tip:     tip,
 		db:      db,
+		cms:     cms,
 	}
 
 	return bc
