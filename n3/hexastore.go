@@ -158,6 +158,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 					if t.Object > lastEntry.Object {
 						commitTuple = true
 					}
+				} else {
 					commitTuple = true
 				}
 			}
@@ -193,7 +194,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 				// TODO: Matt, you're storing tVer - lastVer in the CMS, but comparing that value with tVer; is that correct?
 				// log.Printf("committed tuple: %+v", t)
 			} else {
-				log.Printf("not committing tuple: %+v", t)
+				log.Printf("not committing tuple: %+v; version %s, previous entry Object %s", t, lastVer, lastEntry.Object)
 			}
 
 		}, stan.DeliverAllAvailable())

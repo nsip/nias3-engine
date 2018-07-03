@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/middleware"
 )
 
-func RunWebserver(webPort int, localBlockchain *Blockchain, hexastore *Hexastore) {
+func RunWebserver(webPort int, hexastore *Hexastore) {
 
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3web")
@@ -30,6 +30,7 @@ func RunWebserver(webPort int, localBlockchain *Blockchain, hexastore *Hexastore
 	e.Use(middleware.Recover())
 
 	// Route => handler
+	// TODO parameterise context
 	e.POST("/tuple", func(c echo.Context) error {
 
 		// unpack tuple from payload
@@ -38,16 +39,15 @@ func RunWebserver(webPort int, localBlockchain *Blockchain, hexastore *Hexastore
 			return err
 		}
 
-		// TODO this should be writing to the stream, not the sigchain
 		// add to the blockchain
+		localBlockchain := GetBlockchain("SIF", cs.PublicID())
 		b, err := localBlockchain.AddNewBlock(t)
 		if err != nil {
 			log.Println("error adding data block via web:", err)
 			return err
 		}
 
-		blockBytes := b.Serialize()
-		err = sc.Publish("feed", blockBytes)
+		err = sc.Publish("feed", b.Serialize())
 		if err != nil {
 			log.Println("web handler cannot send new block to feed: ", err)
 			return err

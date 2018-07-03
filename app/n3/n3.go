@@ -77,6 +77,7 @@ func main() {
 
 	log.Println("starting Sigchain")
 	// create/open the default blockchain
+	// TODO allow multiple contexts
 	localBlockchain = n3.NewBlockchain(*context)
 
 	// if truly new, commit the genesis block to the feed
@@ -117,7 +118,7 @@ func main() {
 
 	// start the webserver
 	log.Println("starting webserver")
-	go n3.RunWebserver(*webPort, localBlockchain, hexa)
+	go n3.RunWebserver(*webPort, hexa)
 
 	// wait for shutdown
 	select {}
