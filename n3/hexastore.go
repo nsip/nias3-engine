@@ -130,7 +130,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 			cmsKey := t.CmsKeySP()
 			tVer := t.Version
 			lastVer := hexaCMS.Estimate(cmsKey)
-			log.Printf("tver %d lastVer %d\n", tVer, lastVer)
+			//log.Printf("tver %d lastVer %d\n", tVer, lastVer)
 			var lastEntry *SPOTuple
 			lastEntry = nil
 
@@ -365,6 +365,7 @@ func (hx *Hexastore) GetIdentifiers(keyPrefix string) ([][]byte, error) {
 // key prefix is: c:"%s" X:"%s" (Y:"%s" (Z:%s")), where c introduces the context,
 // and X Y Z are any of s p o (subject, predicate, object)
 func (hx *Hexastore) GetTuples(keyPrefix string) ([]*SPOTuple, error) {
+	log.Println(keyPrefix)
 	ids, err := hx.GetIdentifiers(keyPrefix)
 	if err != nil {
 		return nil, err
