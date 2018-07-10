@@ -66,7 +66,7 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 			log.Println(err)
 			return err
 		}
-		log.Printf("/tuples: %#v\n", tuples)
+		//log.Printf("/tuples: %#v\n", tuples)
 
 		// add to the blockchain
 		localBlockchain := GetBlockchain("SIF", cs.PublicID())

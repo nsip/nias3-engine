@@ -365,9 +365,10 @@ func (hx *Hexastore) GetIdentifiers(keyPrefix string) ([][]byte, error) {
 // key prefix is: c:"%s" X:"%s" (Y:"%s" (Z:%s")), where c introduces the context,
 // and X Y Z are any of s p o (subject, predicate, object)
 func (hx *Hexastore) GetTuples(keyPrefix string) ([]*SPOTuple, error) {
-	log.Println(keyPrefix)
+	//log.Println(keyPrefix)
 	ids, err := hx.GetIdentifiers(keyPrefix)
 	if err != nil {
+		log.Println(err)
 		return nil, err
 	}
 	objs := make([]*SPOTuple, 0)

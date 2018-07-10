@@ -84,11 +84,11 @@ func (t *SPOTuple) CmsKeyPOS() string {
 }
 
 func (t *SPOTuple) CmsKeyOPS() string {
-	return fmt.Sprintf("c:%s s:%s o:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Predicate), strconv.Quote(t.Subject))
+	return fmt.Sprintf("c:%s o:%s p:%s s:%s ", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Predicate), strconv.Quote(t.Subject))
 }
 
 func (t *SPOTuple) CmsKeyOSP() string {
-	return fmt.Sprintf("c:%s s:%s o:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Subject), strconv.Quote(t.Predicate))
+	return fmt.Sprintf("c:%s o:%s s:%s p:%s ", strconv.Quote(t.Context), strconv.Quote(t.Object), strconv.Quote(t.Subject), strconv.Quote(t.Predicate))
 }
 
 //
