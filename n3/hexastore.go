@@ -7,7 +7,7 @@ import (
 	//"errors"
 	"fmt"
 	"log"
-	"strconv"
+	//"strconv"
 	"time"
 
 	"github.com/coreos/bbolt"
@@ -204,10 +204,12 @@ func (hx *Hexastore) ConnectToFeed() error {
 				hexaCMS.Update(cmsKey, tVer)
 				// log.Printf("committed tuple: %+v", t)
 			} else {
-				log.Printf("not committing tuple: %+v; version %d", t, lastVer)
-				if lastEntry != nil {
-					log.Printf(" previous entry Object: %s\n", strconv.Quote(lastEntry.Object))
-				}
+				/*
+					log.Printf("not committing tuple: %+v; version %d", t, lastVer)
+					if lastEntry != nil {
+						log.Printf(" previous entry Object: %s\n", strconv.Quote(lastEntry.Object))
+					}
+				*/
 			}
 
 		}, stan.DeliverAllAvailable())

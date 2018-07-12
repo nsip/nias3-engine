@@ -122,11 +122,12 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 		return nil
 	})
 
+	/* NSW DIG hardcoded queries */
 	e.GET("/kla2student", func(c echo.Context) error {
 		kla := c.QueryParam("kla")
 		yrlvl := c.QueryParam("yrlvl")
 		ids, err := hexastore.KLAtoStudentQuery(kla, yrlvl)
-		log.Printf("kla2student: %+v\n", ids)
+		//log.Printf("kla2student: %+v\n", ids)
 		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())
 			return err
@@ -146,6 +147,44 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 		yrlvl := c.QueryParam("yrlvl")
 		ids, err := hexastore.KLAtoTeacherQuery(kla, yrlvl)
 		//log.Printf("%+v\n", tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.Response().Header().Set("Content-Type", "application/json")
+		ret, err := json.Marshal(ids)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.String(http.StatusOK, string(ret))
+		return nil
+	})
+
+	e.GET("/kla2teachinggroup", func(c echo.Context) error {
+		kla := c.QueryParam("kla")
+		yrlvl := c.QueryParam("yrlvl")
+		ids, err := hexastore.KLAtoTeachingGroupQuery(kla, yrlvl)
+		//log.Printf("%+v\n", tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.Response().Header().Set("Content-Type", "application/json")
+		ret, err := json.Marshal(ids)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.String(http.StatusOK, string(ret))
+		return nil
+	})
+
+	e.GET("/kla2timetablesubject", func(c echo.Context) error {
+		kla := c.QueryParam("kla")
+		yrlvl := c.QueryParam("yrlvl")
+		ids, err := hexastore.KLAtoTimeTableSubjectQuery(kla, yrlvl)
+		//log.Printf("%+v\n", ids)
 		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())
 			return err

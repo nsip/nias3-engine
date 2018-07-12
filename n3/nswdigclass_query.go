@@ -19,21 +19,21 @@ func (hx *Hexastore) KLAtoStudentQuery(kla string, yrlvl string) ([]string, erro
 	if err != nil {
 		return ret, err
 	}
-	log.Printf("hx.KLAtoStudentQuery: teachinggroupIds: %#v\n", teachinggroupIds)
+	//log.Printf("hx.KLAtoStudentQuery: teachinggroupIds: %#v\n", teachinggroupIds)
 	for _, x := range teachinggroupIds {
 		students, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" s:\"%s\" p:\"TeachingGroup.StudentList.TeachingGroupStudent", x))
 		if err != nil {
 			log.Println(err)
 			return ret, err
 		}
-		log.Printf("hx.KLAtoStudentQuery: students: %#v\n", students)
+		//log.Printf("hx.KLAtoStudentQuery: students: %#v\n", students)
 		for _, y := range students {
 			if strings.HasSuffix(y.Predicate, ".StudentPersonalRefId") {
 				ret = append(ret, y.Object)
 			}
 		}
 	}
-	log.Printf("hx.KLAtoStudentQuery: ret: %#v\n", ret)
+	//log.Printf("hx.KLAtoStudentQuery: ret: %#v\n", ret)
 	return ret, nil
 }
 
@@ -57,20 +57,19 @@ func (hx *Hexastore) KLAtoTeacherQuery(kla string, yrlvl string) ([]string, erro
 	return ret, nil
 }
 
-func (hx *Hexastore) KLAtoTeachingGroupQuery(kla string, yrlvl string) ([]string, error) {
+func (hx *Hexastore) KLAtoTimeTableSubjectQuery(kla string, yrlvl string) ([]string, error) {
 	schoolcourseinfoIds := make([]string, 0)
 	timetablesubjectIds := make([]string, 0)
-	ret := make([]string, 0)
 	curr, err := strconv.Atoi(yrlvl)
 	if err != nil {
 		log.Println(err)
-		return ret, err
+		return timetablesubjectIds, err
 	}
 
 	schoolcourseinfos, err := hx.GetTuples(`c:"SIF" p:"SchoolCourseInfo.SubjectAreaList`)
 	if err != nil {
 		log.Println(err)
-		return ret, err
+		return timetablesubjectIds, err
 	}
 	for _, x := range schoolcourseinfos {
 		if strings.HasSuffix(x.Predicate, ".Code") {
@@ -84,7 +83,7 @@ func (hx *Hexastore) KLAtoTeachingGroupQuery(kla string, yrlvl string) ([]string
 		timetablesubjects, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" p:\"TimeTableSubject.SchoolCourseInfoRefId\" o:\"%s\" ", x))
 		if err != nil {
 			log.Println(err)
-			return ret, err
+			return timetablesubjectIds, err
 		}
 		//log.Printf("KLAtoTeachingGroupQuery: timetablesubjects, %#v\n", timetablesubjects)
 		for _, y := range timetablesubjects {
@@ -92,7 +91,7 @@ func (hx *Hexastore) KLAtoTeachingGroupQuery(kla string, yrlvl string) ([]string
 			yrlvls, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" s:\"%s\" p:\"TimeTableSubject.AcademicYear.Code\" ", y.Subject))
 			if err != nil {
 				log.Println(err)
-				return ret, err
+				return timetablesubjectIds, err
 			}
 			for _, z := range yrlvls {
 				found = found || z.Object == yrlvl
@@ -101,22 +100,22 @@ func (hx *Hexastore) KLAtoTeachingGroupQuery(kla string, yrlvl string) ([]string
 				yrlvls1, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" s:\"%s\" p:\"TimeTableSubject.AcademicYearRange.Start.Code\" ", y.Subject))
 				if err != nil {
 					log.Println(err)
-					return ret, err
+					return timetablesubjectIds, err
 				}
 				yrlvls2, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" s:\"%s\" p:\"TimeTableSubject.AcademicYearRange.End.Code\" ", y.Subject))
 				if err != nil {
 					log.Println(err)
-					return ret, err
+					return timetablesubjectIds, err
 				}
 				if len(yrlvls1) == 1 && len(yrlvls2) == 1 {
 					start, err := strconv.Atoi(yrlvls1[0].Object)
 					if err != nil {
 						log.Println(err)
-						return ret, err
+						return timetablesubjectIds, err
 					}
 					end, err := strconv.Atoi(yrlvls2[0].Object)
 					if err != nil {
-						return ret, err
+						return timetablesubjectIds, err
 					}
 					found = start <= curr && end >= curr
 				}
@@ -127,6 +126,15 @@ func (hx *Hexastore) KLAtoTeachingGroupQuery(kla string, yrlvl string) ([]string
 		}
 	}
 	//log.Printf("KLAtoTeachingGroupQuery: timetablesubjectIds, %#v\n", timetablesubjectIds)
+	return timetablesubjectIds, nil
+}
+
+func (hx *Hexastore) KLAtoTeachingGroupQuery(kla string, yrlvl string) ([]string, error) {
+	ret := make([]string, 0)
+	timetablesubjectIds, err := hx.KLAtoTimeTableSubjectQuery(kla, yrlvl)
+	if err != nil {
+		return ret, err
+	}
 	for _, x := range timetablesubjectIds {
 		//teachinggroups, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" o:\"%s\" p:\"TeachingGroup.TimeTableSubjectRefId\" ", x))
 		teachinggroups, err := hx.GetTuples(fmt.Sprintf("c:\"SIF\" p:\"TeachingGroup.TimeTableSubjectRefId\" o:\"%s\" ", x))
