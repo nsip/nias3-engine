@@ -22,7 +22,7 @@ var hexboltDB *bolt.DB
 func init() {
 	if hexboltDB == nil {
 		var dbErr error
-		hexboltDB, dbErr = bolt.Open("n3hex.db", 0600, nil)
+		hexboltDB, dbErr = bolt.Open("n3hex.db", 0600, &bolt.Options{NoFreelistSync: true})
 		if dbErr != nil {
 			log.Fatal(errors.Wrap(dbErr, "cannot open n3 hexstore."))
 		}
@@ -142,7 +142,6 @@ func (hx *Hexastore) ConnectToFeed() error {
 				// get the currently stored tuple
 				err := hx.db.View(func(tx *bolt.Tx) error {
 
-					//bkt := tx.Bucket([]byte(hexaBucket))
 					bkt := NewHexaBucket(tx)
 					lastEntryBytes = bkt.Get([]byte(cmsKey))
 
@@ -166,7 +165,6 @@ func (hx *Hexastore) ConnectToFeed() error {
 
 			if commitTuple {
 				err = hx.db.Update(func(tx *bolt.Tx) error {
-					//bkt := tx.Bucket([]byte(hexaBucket))
 					bkt := NewHexaBucket(tx)
 					// TODO: Track tombstones, and compact them: remove all keys pointing to tombstones
 					// TODO: Track empty objects (which are used for deletion of SPO), and compact them:

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 
 	n3 "github.com/nsip/nias3-engine/n3"
@@ -20,12 +21,23 @@ func main() {
 	context := flag.String("c", "SIF", "blockchain context")
 	inet := flag.Bool("inet", false, "turn on node p2p access to external network")
 	webPort := flag.Int("webport", 1340, "port to run web handler on")
+	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to `file`")
 	flag.Parse()
 
 	var nss *n3.NSS
 	var msgCMS *n3.N3CMS
 	var localBlockchain *n3.Blockchain
 	var hexa *n3.Hexastore
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
 
 	// initiate n3 shutdown handler
 	c := make(chan os.Signal, 2)
@@ -45,6 +57,9 @@ func main() {
 		}
 		if hexa != nil {
 			hexa.Close()
+		}
+		if *cpuprofile != "" {
+			pprof.StopCPUProfile()
 		}
 		log.Println("n3 shutdown complete")
 		os.Exit(1)

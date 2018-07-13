@@ -32,7 +32,6 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 	// Route => handler
 	// TODO parameterise context
 	e.POST("/tuple", func(c echo.Context) error {
-
 		// unpack tuple from payload
 		t := new(SPOTuple)
 		if err = c.Bind(t); err != nil {
@@ -52,16 +51,15 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 			log.Println("web handler cannot send new block to feed: ", err)
 			return err
 		}
-
 		return c.JSON(http.StatusOK, t)
 
 	})
 
 	// TODO parameterise context
 	e.POST("/tuples", func(c echo.Context) error {
-
 		// unpack tuple from payload
-		tuples := make([]SPOTuple, 0)
+		tuples := make([]*SPOTuple, 0)
+		// unpack tuple from payload
 		if err = c.Bind(&tuples); err != nil {
 			log.Println(err)
 			return err
@@ -70,13 +68,27 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 
 		// add to the blockchain
 		localBlockchain := GetBlockchain("SIF", cs.PublicID())
-		for _, t := range tuples {
-			b, err := localBlockchain.AddNewBlock(&t)
-			if err != nil {
-				log.Println("error adding data block via web:", err)
-				return err
-			}
+		/*
+			for _, t := range tuples {
+				b, err := localBlockchain.AddNewBlock(&t)
+				if err != nil {
+					log.Println("error adding data block via web:", err)
+					return err
+				}
 
+				err = sc.Publish("feed", b.Serialize())
+				if err != nil {
+					log.Println("web handler cannot send new block to feed: ", err)
+					return err
+				}
+			}
+		*/
+		blocks, err := localBlockchain.AddNewBlocks(tuples)
+		if err != nil {
+			log.Println("error adding data block via web:", err)
+			return err
+		}
+		for _, b := range blocks {
 			err = sc.Publish("feed", b.Serialize())
 			if err != nil {
 				log.Println("web handler cannot send new block to feed: ", err)

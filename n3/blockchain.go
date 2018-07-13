@@ -19,7 +19,7 @@ var localCMSStore map[string]*N3CMS
 func init() {
 	if boltDB == nil {
 		var dbErr error
-		boltDB, dbErr = bolt.Open("n3.db", 0600, nil)
+		boltDB, dbErr = bolt.Open("n3.db", 0600, &bolt.Options{NoFreelistSync: true})
 		if dbErr != nil {
 			log.Fatal(errors.Wrap(dbErr, "cannot open n3 blockchain datastore."))
 		}
@@ -88,34 +88,132 @@ func (bc *Blockchain) AddNewBlock(data *SPOTuple) (*Block, error) {
 	}
 	// log.Printf("\n\ttuple: %+v\n\tversion:%d\n", newBlock.Data, newBlock.Data.Version)
 
-	// add the block to the chain
-	addedBlock, err := bc.AddBlock(newBlock)
-	if err != nil {
-		return nil, errors.Wrap(err, "AddNewBlock error: ")
-	}
+	/*
+		// add the block to the chain
+		addedBlock, err := bc.AddBlock(newBlock)
+		if err != nil {
+			return nil, errors.Wrap(err, "AddNewBlock error: ")
+		}
 
-	// update the tip
+		// update the tip
+		err = bc.db.Update(func(tx *bolt.Tx) error {
+			root := tx.Bucket([]byte(contextsBucket))
+			cntx := root.Bucket([]byte(data.Context))
+			usr := cntx.Bucket([]byte(cs.PublicID()))
+			b := usr.Bucket([]byte(blocksBucket))
+			err = b.Put([]byte("l"), []byte(addedBlock.Hash))
+			if err != nil {
+				log.Println("db l update error:", err)
+				return err
+			}
+
+			bc.tip = []byte(addedBlock.Hash)
+
+			return nil
+		})
+	*/
+	// FOLD INTO ONE TRANSACTION
+	//var prevBlock *Block
+
 	err = bc.db.Update(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(contextsBucket))
 		cntx := root.Bucket([]byte(data.Context))
 		usr := cntx.Bucket([]byte(cs.PublicID()))
-		b := usr.Bucket([]byte(blocksBucket))
-		err = b.Put([]byte("l"), []byte(addedBlock.Hash))
+		bkt := usr.Bucket([]byte(blocksBucket))
+		/* redundant: we have set newBlock.PrevBlockHash to be prevBlock.Hash already! */
+		/*
+			prevBlock = DeserializeBlock(bkt.Get([]byte(newBlock.PrevBlockHash)))
+			if prevBlock.Hash != newBlock.PrevBlockHash {
+				return errors.New("attempted to add invalid block: block has no chain.")
+			}
+		*/
+		err := bkt.Put([]byte(newBlock.Hash), newBlock.Serialize())
+		if err != nil {
+			log.Println("db l update error:", err)
+			return err
+		}
+		err = bkt.Put([]byte("l"), []byte(newBlock.Hash))
 		if err != nil {
 			log.Println("db l update error:", err)
 			return err
 		}
 
-		bc.tip = []byte(addedBlock.Hash)
+		bc.tip = []byte(newBlock.Hash)
 
 		return nil
 	})
+
 	if err != nil {
 		return nil, errors.Wrap(err, "AddBlock error: ")
 	}
 
 	return newBlock, nil
 
+}
+
+// AddNewBlocks creates multiple blocks in the blockchain
+// from the tuples provided
+// returns the accpted block, or an error if the
+// block is not valid
+// Assumes all data belongs to the same context
+//
+func (bc *Blockchain) AddNewBlocks(datablocks []*SPOTuple) ([]*Block, error) {
+
+	var lastHash string
+	ret := make([]*Block, 0)
+
+	err := bc.db.Update(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(contextsBucket))
+		cntx := root.Bucket([]byte(datablocks[0].Context))
+		usr := cntx.Bucket([]byte(cs.PublicID()))
+		bkt := usr.Bucket([]byte(blocksBucket))
+		// find current tip of the chain
+		lastHash = string(bkt.Get([]byte("l")))
+
+		for _, data := range datablocks {
+
+			// assign data tuple version within this b/c context
+			cmsKey := data.CmsKeySP()
+			knownVer := bc.cms.Estimate(cmsKey)
+			if knownVer > 0 {
+				nextVer := knownVer + 1
+				data.Version = nextVer
+				bc.cms.Update(cmsKey, 1)
+			} else {
+				data.Version = 1
+				bc.cms.Update(cmsKey, 1)
+			}
+
+			// create the new block as next in chain
+			newBlock, err1 := NewBlock(data, lastHash)
+			if err1 != nil {
+				return errors.Wrap(err1, "AddNewBlock error: ")
+			}
+			// log.Printf("\n\ttuple: %+v\n\tversion:%d\n", newBlock.Data, newBlock.Data.Version)
+
+			err1 = bkt.Put([]byte(newBlock.Hash), newBlock.Serialize())
+			if err1 != nil {
+				log.Println("db l update error:", err1)
+				return err1
+			}
+			lastHash = newBlock.Hash
+			ret = append(ret, newBlock)
+		}
+		err1 := bkt.Put([]byte("l"), []byte(lastHash))
+		if err1 != nil {
+			log.Println("db l update error:", err1)
+			return err1
+		}
+		bc.tip = []byte(lastHash)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, errors.Wrap(err, "AddBlock error: ")
+	}
+
+	return ret, nil
 }
 
 //
