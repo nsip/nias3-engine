@@ -123,9 +123,30 @@ func main() {
 		node.ConnectToPeer(*target)
 	}
 
+	/*
+		Topology of streams and stores:
+		(API, peers) -> Blockchain.AddNewBlock() -> "stream:feed"
+		All incoming records, from other peers or from local API, go into "feed" via sigchain
+
+		"stream:feed" -> Hexastore.db + N3CMS.cms + FilterFeed() -> "stream:filteredfeed"
+		By looking up the primary hexastore and the CMS, incoming records are filtered into:
+		(1) records that will actually be saved; (2) tombstones for replaced records,
+		and stored under the 7 keys of the hexastore. These are queued as key/value pairs
+		into a write-ahead log, to deal with the slowness of random writes on bolt
+
+		"stream:filteredfeed" -> Hexastore.ConnectToFeed -> Hexastore.db
+		The key/value pairs are fetched from filteredfeed, and stored into the primary Hexastore.
+		Filteredfeed is a write-ahead log: entries are fetched 100 at a time, because of
+		how expensive bolt updates are, and any remainder is fetched after a window of 10 sec.
+	*/
+
 	// start the hexastore
 	log.Println("starting hexastore")
 	hexa = n3.NewHexastore()
+	err = hexa.FilterFeed()
+	if err != nil {
+		log.Fatal("cannot connect hexastore to feed")
+	}
 	err = hexa.ConnectToFeed()
 	if err != nil {
 		log.Fatal("cannot connect hexastore to feed")

@@ -23,3 +23,10 @@ message Block {
 	string		Sender = 7;
 	string 		Receiver = 8;
 }
+
+message DbCommand {
+  string verb =1;
+  bytes key =2;
+  bytes value =3;
+}
+

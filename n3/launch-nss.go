@@ -131,6 +131,7 @@ func NSSConnection(clientID string) (stan.Conn, error) {
 	}
 
 	var stanConn stan.Conn
+	log.Printf("%#v\n", config)
 	if stanConn, err = stan.Connect(
 		config.ClusterId,
 		config.ClientId,

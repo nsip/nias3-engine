@@ -68,21 +68,6 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 
 		// add to the blockchain
 		localBlockchain := GetBlockchain("SIF", cs.PublicID())
-		/*
-			for _, t := range tuples {
-				b, err := localBlockchain.AddNewBlock(&t)
-				if err != nil {
-					log.Println("error adding data block via web:", err)
-					return err
-				}
-
-				err = sc.Publish("feed", b.Serialize())
-				if err != nil {
-					log.Println("web handler cannot send new block to feed: ", err)
-					return err
-				}
-			}
-		*/
 		blocks, err := localBlockchain.AddNewBlocks(tuples)
 		if err != nil {
 			log.Println("error adding data block via web:", err)

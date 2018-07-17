@@ -115,101 +115,45 @@ func (hx *Hexastore) ConnectToFeed() error {
 		defer sc.Close()
 		defer hexaCMS.Close()
 
-		// main message handling routine
-		sub, err := sc.Subscribe("feed", func(m *stan.Msg) {
+		commands := make([]*DbCommand, 101)
+		lastUpdate := time.Now()
 
-			commitTuple := false
+		// main message handling routine
+		sub, err := sc.Subscribe("filteredfeed", func(m *stan.Msg) {
 
 			// get the block from the feed
-			blk := DeserializeBlock(m.Data)
+			cmd := DeserializeDbCommand(m.Data)
+			//log.Printf("%s %s %s\n", cmd.Verb, string(cmd.Key), string(cmd.Value))
+			commands = append(commands, cmd)
 
-			// get the tuple
-			t := blk.Data
-
-			// assign data tuple version within this b/c context
-			cmsKey := t.CmsKeySP()
-			tVer := t.Version
-			lastVer := hexaCMS.Estimate(cmsKey)
-			//log.Printf("tver %d lastVer %d\n", tVer, lastVer)
-			var lastEntry *SPOTuple
-			lastEntry = nil
-
-			switch {
-			case lastVer < tVer:
-				commitTuple = true
-			case lastVer == tVer:
-				var lastEntryBytes []byte
-				// get the currently stored tuple
-				err := hx.db.View(func(tx *bolt.Tx) error {
-
-					bkt := NewHexaBucket(tx)
-					lastEntryBytes = bkt.Get([]byte(cmsKey))
-
-					return err
-				})
-				if err != nil {
-					errc <- errors.Wrap(err, "Hexa lookup error: ")
-				}
-				// if there is one do the necessary comparison
-				if lastEntryBytes != nil {
-					lastEntry = DeserializeTuple(lastEntryBytes)
-					// check object legths: arbitrary lexical ordering for colliding tuples with
-					// identical version number, as done in gunDB
-					if t.Object > lastEntry.Object {
-						commitTuple = true
-					}
-				} else {
-					commitTuple = true
-				}
-			}
-
-			if commitTuple {
+			if len(commands) == 200 || len(commands) > 0 && time.Since(lastUpdate).Seconds() > 2.0 {
 				err = hx.db.Update(func(tx *bolt.Tx) error {
 					bkt := NewHexaBucket(tx)
-					// TODO: Track tombstones, and compact them: remove all keys pointing to tombstones
-					// TODO: Track empty objects (which are used for deletion of SPO), and compact them:
-					// remove all permutations of keys pointing to empty objects
+					for _, cmd := range commands {
+						if cmd == nil {
+							continue
+						}
+						//log.Printf("%#v\n", cmd)
 
-					if lastVer < tVer && lastVer > 0 && lastEntry == nil {
-						// there is potentially a previous entry to be deleted
-						lastEntryBytes := bkt.Get([]byte(cmsKey))
-						if lastEntryBytes != nil {
-							lastEntry = DeserializeTuple(lastEntryBytes)
+						switch cmd.Verb {
+						case "put":
+							if err1 := bkt.Put(cmd.Key, cmd.Value); err1 != nil {
+								return err1
+							}
+						case "delete":
+							if err1 := bkt.Delete(cmd.Key); err1 != nil {
+								return err1
+							}
 						}
 					}
-
-					if lastEntry != nil {
-						deleted := lastEntry.Tombstone()
-						// log.Printf("tombstone tuple: %+v", deleted)
-						// tombstone the old entry with a different subject
-						if err = bkt.StoreSingleKey(deleted, deleted); err != nil {
-							return err
-						}
-						// delete the old entry
-						if err = bkt.Unstore(lastEntry); err != nil {
-							return err
-						}
-					}
-					// store the new entry
-					return bkt.Store(t, t)
+					commands = make([]*DbCommand, 100)
+					lastUpdate = time.Now()
+					return nil
 				})
 				if err != nil {
 					errc <- errors.Wrap(err, "unable to update hexastore")
 				}
-				// register the current known version
-				// hexaCMS.Update(cmsKey, (tVer - lastVer))
-				// TODO: Matt, you're storing tVer - lastVer in the CMS, but comparing that value with tVer; is that correct?
-				hexaCMS.Update(cmsKey, tVer)
-				// log.Printf("committed tuple: %+v", t)
-			} else {
-				/*
-					log.Printf("not committing tuple: %+v; version %d", t, lastVer)
-					if lastEntry != nil {
-						log.Printf(" previous entry Object: %s\n", strconv.Quote(lastEntry.Object))
-					}
-				*/
 			}
-
 		}, stan.DeliverAllAvailable())
 		if err != nil {
 			errc <- errors.Wrap(err, "error creating hexastore feed subscription: ")
