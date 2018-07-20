@@ -25,8 +25,9 @@ message Block {
 }
 
 message DbCommand {
-  string verb =1;
-  bytes key =2;
-  bytes value =3;
+  string Verb =1;
+  bytes Key =2;
+  bytes Value =3;
+  bytes Ksuid=4;
 }
 

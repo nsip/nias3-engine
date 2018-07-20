@@ -17,6 +17,7 @@ nss/nats-streaming-server -p 4223 & echo $! > nats.pid
 # give the nats server time to come up
 sleep 5
 
+#./n3 -l 2000 -c SIF -cpuprofile cpu.prof & echo $! >> nats.pid
 ./n3 -l 2000 -c SIF & echo $! >> nats.pid
 
 echo "Launched NIAS3"

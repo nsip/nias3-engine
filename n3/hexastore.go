@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	//"strconv"
+	"sort"
 	"time"
 
 	"github.com/coreos/bbolt"
@@ -77,6 +78,23 @@ func NewHexaBucket(tx *bolt.Tx) *HexaBucket {
 	return &HexaBucket{bkt: tx.Bucket([]byte(hexaBucket))}
 }
 
+const CommandLen = 100
+
+type dbCommandSlice []*DbCommand
+
+func (v dbCommandSlice) Len() int      { return len(v) }
+func (v dbCommandSlice) Swap(i, j int) { v[i], v[j] = v[j], v[i] }
+
+func (v dbCommandSlice) Less(i, j int) bool {
+	if v[i] == nil {
+		return false
+	}
+	if v[j] == nil {
+		return true
+	}
+	return bytes.Compare(v[i].Key, v[j].Key) == -1 || bytes.Compare(v[i].Ksuid, v[j].Ksuid) == -1
+}
+
 //
 // Attaches the hexastore listener / conflict resolver to
 // the n3 stan feed, and populates with tuples read from the feed.
@@ -115,7 +133,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 		defer sc.Close()
 		defer hexaCMS.Close()
 
-		commands := make([]*DbCommand, 101)
+		commands := make([]*DbCommand, CommandLen+1)
 		lastUpdate := time.Now()
 
 		// main message handling routine
@@ -126,10 +144,12 @@ func (hx *Hexastore) ConnectToFeed() error {
 			//log.Printf("%s %s %s\n", cmd.Verb, string(cmd.Key), string(cmd.Value))
 			commands = append(commands, cmd)
 
-			if len(commands) == 200 || len(commands) > 0 && time.Since(lastUpdate).Seconds() > 2.0 {
+			if len(commands) == CommandLen || len(commands) > 0 && time.Since(lastUpdate).Seconds() > 1.0 {
 				err = hx.db.Update(func(tx *bolt.Tx) error {
 					bkt := NewHexaBucket(tx)
-					for _, cmd := range commands {
+					commands1 := dbCommandSlice(commands)
+					sort.Sort(commands1)
+					for _, cmd := range commands1 {
 						if cmd == nil {
 							continue
 						}
@@ -146,7 +166,7 @@ func (hx *Hexastore) ConnectToFeed() error {
 							}
 						}
 					}
-					commands = make([]*DbCommand, 100)
+					commands = make([]*DbCommand, CommandLen)
 					lastUpdate = time.Now()
 					return nil
 				})

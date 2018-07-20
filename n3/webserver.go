@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"github.com/nsip/nias3-engine/n3crypto"
 )
 
 func RunWebserver(webPort int, hexastore *Hexastore) {
@@ -198,5 +199,7 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 
 	// Start server
 	addr := fmt.Sprintf(":%d", webPort)
-	e.Logger.Fatal(e.Start(addr))
+	n3crypto.NewTLSCertificate()
+	//e.Logger.Fatal(e.Start(addr))
+	e.Logger.Fatal(e.StartTLS(addr, "cert.pem", "key.pem"))
 }
