@@ -200,6 +200,6 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 	// Start server
 	addr := fmt.Sprintf(":%d", webPort)
 	n3crypto.NewTLSCertificate()
-	//e.Logger.Fatal(e.Start(addr))
-	e.Logger.Fatal(e.StartTLS(addr, "cert.pem", "key.pem"))
+	e.Logger.Fatal(e.Start(addr))
+	//e.Logger.Fatal(e.StartTLS(addr, "cert.pem", "key.pem"))
 }
