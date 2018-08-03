@@ -9,6 +9,7 @@ import (
 	"log"
 	//"strconv"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/coreos/bbolt"
@@ -78,7 +79,7 @@ func NewHexaBucket(tx *bolt.Tx) *HexaBucket {
 	return &HexaBucket{bkt: tx.Bucket([]byte(hexaBucket))}
 }
 
-const CommandLen = 100
+const CommandLen = 1000
 
 type dbCommandSlice []*DbCommand
 
@@ -93,6 +94,36 @@ func (v dbCommandSlice) Less(i, j int) bool {
 		return true
 	}
 	return bytes.Compare(v[i].Key, v[j].Key) == -1 || bytes.Compare(v[i].Ksuid, v[j].Ksuid) == -1
+}
+
+func (hx *Hexastore) update_batch(commands []*DbCommand) ([]*DbCommand, time.Time, error) {
+	log.Printf("Updating %d entries\n", len(commands))
+	if len(commands) == 0 {
+		return commands, time.Now(), nil
+	}
+	err := hx.db.Update(func(tx *bolt.Tx) error {
+		bkt := NewHexaBucket(tx)
+		commands1 := dbCommandSlice(commands)
+		sort.Sort(commands1)
+		for _, cmd := range commands1 {
+			if cmd == nil {
+				continue
+			}
+			//log.Printf("%#v\n", cmd)
+			switch cmd.Verb {
+			case "put":
+				if err1 := bkt.Put(cmd.Key, cmd.Value); err1 != nil {
+					return err1
+				}
+			case "delete":
+				if err1 := bkt.Delete(cmd.Key); err1 != nil {
+					return err1
+				}
+			}
+		}
+		return nil
+	})
+	return make([]*DbCommand, 0), time.Now(), err
 }
 
 //
@@ -110,7 +141,6 @@ func (v dbCommandSlice) Less(i, j int) bool {
 // replaced by a/ unified P.
 //
 func (hx *Hexastore) ConnectToFeed() error {
-
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3hexa")
 	if err != nil {
@@ -127,58 +157,54 @@ func (hx *Hexastore) ConnectToFeed() error {
 		return err
 	}
 
+	errc := make(chan error)
+	commands := make([]*DbCommand, 0)
+	lastUpdate := time.Now()
+	var mutex = &sync.Mutex{}
 	go func() {
-		errc := make(chan error)
-		defer close(errc)
-		defer sc.Close()
-		defer hexaCMS.Close()
-
-		commands := make([]*DbCommand, CommandLen+1)
-		lastUpdate := time.Now()
-
-		// main message handling routine
-		sub, err := sc.Subscribe("filteredfeed", func(m *stan.Msg) {
-
-			// get the block from the feed
-			cmd := DeserializeDbCommand(m.Data)
-			//log.Printf("%s %s %s\n", cmd.Verb, string(cmd.Key), string(cmd.Value))
-			commands = append(commands, cmd)
-
-			if len(commands) == CommandLen || len(commands) > 0 && time.Since(lastUpdate).Seconds() > 1.0 {
-				err = hx.db.Update(func(tx *bolt.Tx) error {
-					bkt := NewHexaBucket(tx)
-					commands1 := dbCommandSlice(commands)
-					sort.Sort(commands1)
-					for _, cmd := range commands1 {
-						if cmd == nil {
-							continue
-						}
-						//log.Printf("%#v\n", cmd)
-
-						switch cmd.Verb {
-						case "put":
-							if err1 := bkt.Put(cmd.Key, cmd.Value); err1 != nil {
-								return err1
-							}
-						case "delete":
-							if err1 := bkt.Delete(cmd.Key); err1 != nil {
-								return err1
-							}
-						}
-					}
-					commands = make([]*DbCommand, CommandLen)
-					lastUpdate = time.Now()
-					return nil
-				})
+		for {
+			if len(commands) > 0 {
+				mutex.Lock()
+				commands, lastUpdate, err = hx.update_batch(commands)
+				mutex.Unlock()
 				if err != nil {
 					errc <- errors.Wrap(err, "unable to update hexastore")
 				}
 			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+
+	records := 0
+	go func() {
+		defer close(errc)
+		defer sc.Close()
+		defer hexaCMS.Close()
+
+		// main message handling routine
+		sub, err := sc.Subscribe("filteredfeed", func(m *stan.Msg) {
+			records++
+			if records == 1000 {
+				//log.Println("Filtered Feed: Processed 1000 tuples")
+				records = 0
+			}
+			// get the block from the feed
+			cmd := DeserializeDbCommand(m.Data)
+			//log.Printf("%s %s\n", cmd.Verb, string(cmd.Key))
+			commands = append(commands, cmd)
+
+			//		if len(commands) > CommandLen {
+			//			mutex.Lock()
+			//			commands, lastUpdate, err = hx.update_batch(commands)
+			//			mutex.Unlock()
+			//			if err != nil {
+			//				errc <- errors.Wrap(err, "unable to update hexastore")
+			//			}
+			//		}
 		}, stan.DeliverAllAvailable())
 		if err != nil {
 			errc <- errors.Wrap(err, "error creating hexastore feed subscription: ")
 		}
-
 		// wait for errors on reading feed or committing tuples
 		err = <-errc
 		log.Println("error in hexa subscription: ", err)

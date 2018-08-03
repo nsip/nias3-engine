@@ -30,6 +30,12 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
+	ackHandler := func(ackedNuid string, err error) {
+		if err != nil {
+			log.Printf("Warning: error publishing msg id %s: %v\n", ackedNuid, err.Error())
+		}
+	}
+
 	// Route => handler
 	// TODO parameterise context
 	e.POST("/tuple", func(c echo.Context) error {
@@ -75,15 +81,14 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 			return err
 		}
 		for _, b := range blocks {
-			err = sc.Publish("feed", b.Serialize())
+			// err = sc.Publish("feed", b.Serialize())
+			_, err := sc.PublishAsync("feed", b.Serialize(), ackHandler)
 			if err != nil {
 				log.Println("web handler cannot send new block to feed: ", err)
 				return err
 			}
 		}
-
 		return c.JSON(http.StatusOK, tuples)
-
 	})
 
 	e.GET("/HasKey/:key", func(c echo.Context) error {
