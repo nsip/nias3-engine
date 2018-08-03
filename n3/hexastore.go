@@ -96,16 +96,15 @@ func (v dbCommandSlice) Less(i, j int) bool {
 	return bytes.Compare(v[i].Key, v[j].Key) == -1 || bytes.Compare(v[i].Ksuid, v[j].Ksuid) == -1
 }
 
-func (hx *Hexastore) update_batch(commands []*DbCommand) ([]*DbCommand, time.Time, error) {
+func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
 	log.Printf("Updating %d entries\n", len(commands))
 	if len(commands) == 0 {
-		return commands, time.Now(), nil
+		return nil
 	}
 	err := hx.db.Update(func(tx *bolt.Tx) error {
 		bkt := NewHexaBucket(tx)
-		commands1 := dbCommandSlice(commands)
-		sort.Sort(commands1)
-		for _, cmd := range commands1 {
+		sort.Sort(commands)
+		for _, cmd := range commands {
 			if cmd == nil {
 				continue
 			}
@@ -113,17 +112,19 @@ func (hx *Hexastore) update_batch(commands []*DbCommand) ([]*DbCommand, time.Tim
 			switch cmd.Verb {
 			case "put":
 				if err1 := bkt.Put(cmd.Key, cmd.Value); err1 != nil {
+					log.Println(err1)
 					return err1
 				}
 			case "delete":
 				if err1 := bkt.Delete(cmd.Key); err1 != nil {
+					log.Println(err1)
 					return err1
 				}
 			}
 		}
 		return nil
 	})
-	return make([]*DbCommand, 0), time.Now(), err
+	return err
 }
 
 //
@@ -159,14 +160,15 @@ func (hx *Hexastore) ConnectToFeed() error {
 
 	errc := make(chan error)
 	commands := make([]*DbCommand, 0)
-	lastUpdate := time.Now()
 	var mutex = &sync.Mutex{}
 	go func() {
 		for {
 			if len(commands) > 0 {
 				mutex.Lock()
-				commands, lastUpdate, err = hx.update_batch(commands)
+				commands1 := dbCommandSlice(commands)
+				commands = make([]*DbCommand, 0)
 				mutex.Unlock()
+				err = hx.update_batch(commands1)
 				if err != nil {
 					errc <- errors.Wrap(err, "unable to update hexastore")
 				}
@@ -191,7 +193,9 @@ func (hx *Hexastore) ConnectToFeed() error {
 			// get the block from the feed
 			cmd := DeserializeDbCommand(m.Data)
 			//log.Printf("%s %s\n", cmd.Verb, string(cmd.Key))
+			mutex.Lock()
 			commands = append(commands, cmd)
+			mutex.Unlock()
 
 			//		if len(commands) > CommandLen {
 			//			mutex.Lock()
