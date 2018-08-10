@@ -30,12 +30,13 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	ackHandler := func(ackedNuid string, err error) {
-		if err != nil {
-			log.Printf("Warning: error publishing msg id %s: %v\n", ackedNuid, err.Error())
+	/*
+		ackHandler := func(ackedNuid string, err error) {
+			if err != nil {
+				log.Printf("Warning: error publishing msg id %s: %v\n", ackedNuid, err.Error())
+			}
 		}
-	}
-
+	*/
 	// Route => handler
 	// TODO parameterise context
 	e.POST("/tuple", func(c echo.Context) error {
@@ -53,6 +54,9 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 			return err
 		}
 
+		mutex.Lock()
+		filterfeed_records++
+		mutex.Unlock()
 		err = sc.Publish("feed", b.Serialize())
 		if err != nil {
 			log.Println("web handler cannot send new block to feed: ", err)
@@ -81,8 +85,12 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 			return err
 		}
 		for _, b := range blocks {
-			// err = sc.Publish("feed", b.Serialize())
-			_, err := sc.PublishAsync("feed", b.Serialize(), ackHandler)
+			// Asynchronous posting onto stream is substantially faster, but the ordering needs to be restablished on the receiving stream
+			//_, err := sc.PublishAsync("feed", b.Serialize(), ackHandler)
+			mutex.Lock()
+			filterfeed_records++
+			mutex.Unlock()
+			err = sc.Publish("feed", b.Serialize())
 			if err != nil {
 				log.Println("web handler cannot send new block to feed: ", err)
 				return err

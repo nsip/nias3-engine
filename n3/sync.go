@@ -99,6 +99,9 @@ func (sp *SyncProtocol) createInboundReader(ws *WrappedStream) error {
 			// log.Println("\t...received block is valid")
 
 			// if all ok publish to the feed
+			mutex.Lock()
+			filterfeed_records++
+			mutex.Unlock()
 			err = sc.Publish("feed", validBlock.Serialize())
 			if err != nil {
 				log.Println("unable to publish message to nss: ", err)

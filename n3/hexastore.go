@@ -9,7 +9,8 @@ import (
 	"log"
 	//"strconv"
 	"sort"
-	"sync"
+	"strings"
+	//"sync"
 	"time"
 
 	"github.com/coreos/bbolt"
@@ -93,22 +94,164 @@ func (v dbCommandSlice) Less(i, j int) bool {
 	if v[j] == nil {
 		return true
 	}
-	return bytes.Compare(v[i].Key, v[j].Key) == -1 || bytes.Compare(v[i].Ksuid, v[j].Ksuid) == -1
+	ret := strings.Compare(v[i].Data.Subject, v[j].Data.Subject)
+	if ret < 0 {
+		return true
+	} else if ret > 0 {
+		return false
+	}
+	ret = strings.Compare(v[i].Data.Predicate, v[j].Data.Predicate)
+	if ret < 0 {
+		return true
+	} else if ret > 0 {
+		return false
+	}
+	return v[i].Sequence < v[j].Sequence
 }
 
+type HxCommand struct {
+	Verb     string // "put, delete"
+	Key      []byte
+	Value    []byte
+	Sequence uint64
+}
+
+type hxCommandSlice []*HxCommand
+
+func (v hxCommandSlice) Len() int      { return len(v) }
+func (v hxCommandSlice) Swap(i, j int) { v[i], v[j] = v[j], v[i] }
+
+func (v hxCommandSlice) Less(i, j int) bool {
+	if v[i] == nil {
+		return false
+	}
+	if v[j] == nil {
+		return true
+	}
+	keycmp := bytes.Compare(v[i].Key, v[j].Key)
+	return keycmp < 0 || keycmp == 0 && v[i].Sequence < v[j].Sequence
+}
+
+// Store tuple t in Hexastore, under all hexastore permutations of the key of k.
+func cmdStore(t *SPOTuple, k *SPOTuple, timestamp uint64) []*HxCommand {
+	payload := t.Serialize()
+	commands := make([]*HxCommand, 0)
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeySPO()), Value: payload})
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeySOP()), Value: payload})
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeyPSO()), Value: payload})
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeyPOS()), Value: payload})
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeyOPS()), Value: payload})
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeyOSP()), Value: payload})
+	commands = append(commands, &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeySP()), Value: payload})
+	return commands
+}
+
+// Store tuple t in Hexastore, under only the SPO key of k.
+func cmdStoreSingleKey(t *SPOTuple, k *SPOTuple, timestamp uint64) *HxCommand {
+	payload := t.Serialize()
+	return &HxCommand{Verb: "put", Sequence: timestamp, Key: []byte(k.CmsKeySPO()), Value: payload}
+}
+
+// Delete entries in Hexastore, under all hexastore permutations of the key of k.
+// presupposes hx.db.Update already running
+func cmdUnstore(k *SPOTuple, timestamp uint64) []*HxCommand {
+	commands := make([]*HxCommand, 0)
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeySPO()), Value: nil})
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeySOP()), Value: nil})
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeyPSO()), Value: nil})
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeyPOS()), Value: nil})
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeyOPS()), Value: nil})
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeyOSP()), Value: nil})
+	commands = append(commands, &HxCommand{Verb: "delete", Sequence: timestamp, Key: []byte(k.CmsKeySP()), Value: nil})
+	return commands
+}
+
+// Save a batch of commands to delete or put tuples, respecting the fact that any SP
+// can only have a single O value in the database. Presupposes that this process locks
+// access to the db
+// * Sort the commands by SP, then timestamp
+// * For all commands involving the same SP:
+//   * If the first command is a delete,
+//     * look up the object O1 currently stored in db for SP
+//     * generate commands to delete all hexastore permutations of SPO1
+//     * generate command to put tombstone entry for SPO1
+//   * If the last command is a put,
+//     * Check whether this is the same tuple as the first deletion request for the batch
+//       * If yes, ignore both requests, they do not change the state
+//       * Else, generate commands to put all hexastore permutations of SPO
+//   * Ignore all commands in between: they have been overruled within the batch
+// * Sort all generated commands (permuted keys) by SPO, then timestamp
+// * Process the commands in order: delete entries, put entries
 func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
-	log.Printf("Updating %d entries\n", len(commands))
+	if debug {
+		log.Printf("Updating %d entries\n", len(commands))
+	}
 	if len(commands) == 0 {
 		return nil
 	}
+	sort.Sort(commands)
+	out := make([]*HxCommand, 0)
+	tmp := make([]*HxCommand, 0)
+	deleteObject := ""
+	issuedDelete := false
+	if debug {
+		for _, c := range commands {
+			log.Printf("INPUT: %s %s %s %s %d\n", c.Verb, c.Data.Subject, c.Data.Predicate, c.Data.Object, c.Sequence)
+		}
+	}
 	err := hx.db.Update(func(tx *bolt.Tx) error {
 		bkt := NewHexaBucket(tx)
-		sort.Sort(commands)
-		for _, cmd := range commands {
-			if cmd == nil {
+		for i := range commands {
+			if commands[i] == nil {
 				continue
 			}
-			//log.Printf("%#v\n", cmd)
+			// first record in batch of commands with same SP
+			if i == 0 || commands[i-1] == nil || commands[i-1].Data.Subject != commands[i].Data.Subject ||
+				commands[i-1].Data.Subject == commands[i].Data.Subject && commands[i-1].Data.Predicate != commands[i].Data.Predicate {
+				deleteObject = ""
+				issuedDelete = false
+				if commands[i].Verb == "delete" {
+
+					// TODO: Track tombstones, and compact them: remove all keys pointing to tombstones
+					// TODO: Track empty objects (which are used for deletion of SPO), and compact them:
+					// remove all permutations of keys pointing to empty objects
+
+					cmsKey := commands[i].Data.CmsKeySP()
+					lastEntryBytes := bkt.Get([]byte(cmsKey))
+					if lastEntryBytes != nil {
+						issuedDelete = true
+						lastEntry := DeserializeTuple(lastEntryBytes)
+						deleted := lastEntry.Tombstone()
+						// tombstone the old entry with a different subject
+						tmp = make([]*HxCommand, 0)
+						tmp = append(tmp, cmdStoreSingleKey(deleted, deleted, commands[i].Sequence))
+						tmp = append(tmp, cmdUnstore(lastEntry, commands[i].Sequence)...)
+						deleteObject = lastEntry.Object
+					}
+				}
+			}
+			// last record in batch of commands with same SP
+			if i == len(commands)-1 || commands[i].Data.Subject != commands[i+1].Data.Subject ||
+				commands[i].Data.Subject == commands[i+1].Data.Subject && commands[i].Data.Predicate != commands[i+1].Data.Predicate {
+				if commands[i].Verb == "delete" || issuedDelete && deleteObject != commands[i].Data.Object {
+					// enforce the previous delete
+					out = append(out, tmp...)
+				}
+				if commands[i].Verb == "put" {
+					if issuedDelete && deleteObject == commands[i].Data.Object {
+						// ignore this request, it undoes the previous delete
+					} else {
+						out = append(out, cmdStore(commands[i].Data, commands[i].Data, commands[i].Sequence)...)
+					}
+				}
+			}
+		}
+		out1 := hxCommandSlice(out)
+		sort.Sort(out1)
+		for _, cmd := range out1 {
+			if debug {
+				log.Printf("%s %s\n", cmd.Verb, string(cmd.Key))
+			}
 			switch cmd.Verb {
 			case "put":
 				if err1 := bkt.Put(cmd.Key, cmd.Value); err1 != nil {
@@ -127,10 +270,26 @@ func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
 	return err
 }
 
+var filtered_records uint64
+
+// Report on tuple queue length
+func progress_report() {
+	justReported := true
+	for {
+		if filterfeed_records > filtered_records {
+			log.Printf("%d tuples left in queue\n", filterfeed_records-filtered_records)
+		} else if justReported {
+			log.Printf("0 tuples left in queue\n")
+		}
+		justReported = filterfeed_records > filtered_records
+		time.Sleep(5 * time.Second)
+	}
+}
+
 //
-// Attaches the hexastore listener / conflict resolver to
-// the n3 stan feed, and populates with tuples read from the feed.
+// Reads tuples to be stored or deleted onto write model, and stores or deletes them.
 // Tuples are stored under all hexastore key permutations.
+
 // Presupposes that there can only be one O value stored under SPO;
 // any incoming SPO1 values are treated as conflicting with the original SPO,
 // and overwrite that tuple, with the original SPO tombstoned (under a different
@@ -140,7 +299,7 @@ func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
 // Any use of the hexastore for queries presupposing the same P will then need to
 // operate on a view of the hexastore, with the variant P1, P2, ... instances
 // replaced by a/ unified P.
-//
+
 func (hx *Hexastore) ConnectToFeed() error {
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3hexa")
@@ -150,17 +309,13 @@ func (hx *Hexastore) ConnectToFeed() error {
 	}
 	log.Println("hexa connection to feed ok")
 
-	// create the tuple-dedupe count min sketch
-	hexaCMS, err := NewN3CMS("./hexastore.cms")
-	if err != nil {
-		log.Println("cannot create tuple cms: ", err)
-		hexaCMS.Close()
-		return err
-	}
-
 	errc := make(chan error)
 	commands := make([]*DbCommand, 0)
-	var mutex = &sync.Mutex{}
+	//var mutex = &sync.Mutex{}
+
+	filtered_records = 0
+
+	// send batches of received tuples to database
 	go func() {
 		for {
 			if len(commands) > 0 {
@@ -177,19 +332,16 @@ func (hx *Hexastore) ConnectToFeed() error {
 		}
 	}()
 
-	records := 0
+	// Report on tuple queue length
+	go progress_report()
+
 	go func() {
 		defer close(errc)
 		defer sc.Close()
-		defer hexaCMS.Close()
 
 		// main message handling routine
 		sub, err := sc.Subscribe("filteredfeed", func(m *stan.Msg) {
-			records++
-			if records == 1000 {
-				//log.Println("Filtered Feed: Processed 1000 tuples")
-				records = 0
-			}
+			filtered_records++
 			// get the block from the feed
 			cmd := DeserializeDbCommand(m.Data)
 			//log.Printf("%s %s\n", cmd.Verb, string(cmd.Key))
@@ -213,7 +365,6 @@ func (hx *Hexastore) ConnectToFeed() error {
 		err = <-errc
 		log.Println("error in hexa subscription: ", err)
 		sub.Close()
-		hexaCMS.Close()
 		log.Println("hexastore disconnected from feed")
 	}()
 

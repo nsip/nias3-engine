@@ -26,8 +26,7 @@ message Block {
 
 message DbCommand {
   string Verb =1;
-  bytes Key =2;
-  bytes Value =3;
-  bytes Ksuid=4;
+  SPOTuple        Data = 2;
+  uint64 Sequence=3;
 }
 

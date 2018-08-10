@@ -64,6 +64,9 @@ func DeserializeDbCommand(d []byte) *DbCommand {
 
 }
 
+// count; incremented by any publisher to feed
+var filterfeed_records uint64
+
 // Attaches the hexastore listener / conflict resolver to
 // the n3 stan feed, and filters out tuples already seen (via CMS).
 // Passes on tuples to be saved onto "filterfeed" stream.
@@ -72,6 +75,7 @@ func DeserializeDbCommand(d []byte) *DbCommand {
 // latest stored O value"
 
 func (hx *Hexastore) FilterFeed() error {
+	filterfeed_records = 0
 
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3filter")
@@ -88,8 +92,6 @@ func (hx *Hexastore) FilterFeed() error {
 		hexaCMS.Close()
 		return err
 	}
-
-	records := 0
 
 	go func() {
 		errc := make(chan error)
@@ -111,11 +113,11 @@ func (hx *Hexastore) FilterFeed() error {
 			// we are not using timestamps, but sequence numbers; we will multiply seq number by two, to interleave
 			// deletes and putsA
 			timestamp := m.Sequence * 2
-			records++
-			if records == 1000 {
-				//log.Println("Processed 1000 tuples")
-				records = 0
-			}
+			/*
+				if filterfeed_records%1000 == 0 {
+					//log.Println("Processed 1000 tuples")
+				}
+			*/
 			commitTuple := false
 			// get the block from the feed
 			blk := DeserializeBlock(m.Data)

@@ -34,7 +34,19 @@ func NewN3CMS(fileName string) (*N3CMS, error) {
 	}
 
 	cms := &countminsketch.CountMinSketch{}
-	epsilon := 0.0001
+	// error in estimates is within a factor of epsilon, with probability delta
+	// but epsilon is a fraction of the sum of all frequencies. Because we are putting
+	// a huge number of tuples into the CMS, often, the epsilon fraction has to be
+	// extremely small.
+	// 100k entries once, with delta = 0.9999, epsilon of 0.0001, is still allowing 99.99% probability
+	// (8 sigma) of error being less than 0.0001*(100,000) = 10. Assuming normal distribution,
+	// an error of 1 (we claim the key has been seen when it has not) has probability of
+	// 1 sigma = 66%. That gels with observation. So we need epsilon to be as big as we can
+	// get away with, and delta as small as we can. (Cache size grows linearly with epilson,
+	// logarithmically with delta).
+	// Using 0.00001 for now, which means we get trouble at 1M entries
+	// and CMS size of ca 20M
+	epsilon := 0.00001
 	delta := 0.9999
 
 	cms, err := countminsketch.NewFromFile(fileName)
