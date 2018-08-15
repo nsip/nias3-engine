@@ -13,7 +13,7 @@ import (
 	"github.com/nsip/nias3-engine/n3crypto"
 )
 
-func RunWebserver(webPort int, hexastore *Hexastore) {
+func RunWebserver(webPort int, hexastore *Hexastore, influx *InfluxModel) {
 
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3web")
@@ -127,6 +127,26 @@ func RunWebserver(webPort int, hexastore *Hexastore) {
 		ret, err := json.Marshal(tuples)
 		if err != nil {
 			c.String(http.StatusBadRequest, err.Error())
+			return err
+		}
+		c.String(http.StatusOK, string(ret))
+		return nil
+	})
+
+	e.GET("/influxtuple/:key", func(c echo.Context) error {
+		key := c.Param("key")
+		tuples, err := influx.GetTuples(key, "SIF")
+		//log.Printf("%+v\n", tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			log.Println(err)
+			return err
+		}
+		c.Response().Header().Set("Content-Type", "application/json")
+		ret, err := json.Marshal(tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			log.Println(err)
 			return err
 		}
 		c.String(http.StatusOK, string(ret))

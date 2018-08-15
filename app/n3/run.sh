@@ -14,7 +14,10 @@ fi
 #./nats-streaming-server -p 4223 -sc napval_nss.cfg & echo $! > nats.pid
 nss/nats-streaming-server -p 4223 & echo $! > nats.pid
 
-# give the nats server time to come up
+# rethinkdb & echo $! >> nats.pid
+influxd -config influxdb.conf & echo $! >> nats.pid
+
+# give the nats server and rethink time to come up
 sleep 5
 
 #./n3 -l 2000 -c SIF -cpuprofile cpu.prof & echo $! >> nats.pid

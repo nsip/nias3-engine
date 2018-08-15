@@ -130,7 +130,7 @@ func (hx *Hexastore) FilterFeed() error {
 			tVer := t.Version
 			lastVer := hexaCMS.Estimate(cmsKey)
 			if debug {
-				log.Printf("%s tver %d lastVer %d %d\n", t.CmsKeySPO(), tVer, lastVer, timestamp)
+				log.Printf("FILTER IN: %s tver %d lastVer %d %d\n", t.CmsKeySPO(), tVer, lastVer, timestamp)
 			}
 			var lastEntry *SPOTuple
 			lastEntry = nil

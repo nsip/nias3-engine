@@ -28,6 +28,7 @@ func main() {
 	var msgCMS *n3.N3CMS
 	var localBlockchain *n3.Blockchain
 	var hexa *n3.Hexastore
+	var infl *n3.InfluxModel
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -57,6 +58,9 @@ func main() {
 		}
 		if hexa != nil {
 			hexa.Close()
+		}
+		if infl != nil {
+			infl.Close()
 		}
 		if *cpuprofile != "" {
 			pprof.StopCPUProfile()
@@ -129,15 +133,20 @@ func main() {
 		All incoming records, from other peers or from local API, go into "feed" via sigchain
 
 		"stream:feed" -> Hexastore.db + N3CMS.cms + FilterFeed() -> "stream:filteredfeed"
-		By looking up the primary hexastore and the CMS, incoming records are filtered into:
-		(1) records that will actually be saved; (2) tombstones for replaced records,
-		and stored under the 7 keys of the hexastore. These are queued as key/value pairs
-		into a write-ahead log, to deal with the slowness of random writes on bolt
+		By looking up the in-memory CMS, incoming records are filtered into the records that
+		will actually be saved. If any tuple has an empty object, a delete command is issued
+		for that tuple (delete the currently stored SPO tuple keys).  These are queued as
+		key/value pairs into a write-ahead log, to deal with the slowness of random writes on bolt.
 
 		"stream:filteredfeed" -> Hexastore.ConnectToFeed -> Hexastore.db
-		The key/value pairs are fetched from filteredfeed, and stored into the primary Hexastore.
-		Filteredfeed is a write-ahead log: entries are fetched 100 at a time, because of
-		how expensive bolt updates are, and any remainder is fetched after a window of 10 sec.
+		The key/value pairs are fetched from filteredfeed, and stored into the primary Hexastore,
+		which is the write model.
+		Delete commands are realised as deleting all Hexastore key permutations for the latest
+		stored tuple, and tombstoning that tuple. Put commands are realised as putting all
+		Hexastore key permutations.
+		Filteredfeed is a write-ahead log: entries are fetched every 0.1 sec, because of
+		how expensive bolt updates are. Within a batch, tuples are sorted by SP then timestamp:
+		only the first command (if a delete) and the last command (if a put) are realised.
 	*/
 
 	// start the hexastore
@@ -145,16 +154,22 @@ func main() {
 	hexa = n3.NewHexastore()
 	err = hexa.FilterFeed()
 	if err != nil {
-		log.Fatal("cannot connect hexastore to feed")
+		log.Fatal("cannot connect CMS to feed")
 	}
 	err = hexa.ConnectToFeed()
 	if err != nil {
 		log.Fatal("cannot connect hexastore to feed")
 	}
 
+	infl = n3.NewInfluxModel()
+	infl.ConnectToFeed()
+	if err != nil {
+		log.Fatal("cannot connect influx model to feed")
+	}
+
 	// start the webserver
 	log.Println("starting webserver")
-	go n3.RunWebserver(*webPort, hexa)
+	go n3.RunWebserver(*webPort, hexa, infl)
 
 	// wait for shutdown
 	select {}

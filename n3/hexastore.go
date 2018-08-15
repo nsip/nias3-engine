@@ -94,7 +94,13 @@ func (v dbCommandSlice) Less(i, j int) bool {
 	if v[j] == nil {
 		return true
 	}
-	ret := strings.Compare(v[i].Data.Subject, v[j].Data.Subject)
+	ret := strings.Compare(v[i].Data.Context, v[j].Data.Context)
+	if ret < 0 {
+		return true
+	} else if ret > 0 {
+		return false
+	}
+	ret = strings.Compare(v[i].Data.Subject, v[j].Data.Subject)
 	if ret < 0 {
 		return true
 	} else if ret > 0 {
@@ -205,9 +211,12 @@ func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
 			if commands[i] == nil {
 				continue
 			}
-			// first record in batch of commands with same SP
-			if i == 0 || commands[i-1] == nil || commands[i-1].Data.Subject != commands[i].Data.Subject ||
-				commands[i-1].Data.Subject == commands[i].Data.Subject && commands[i-1].Data.Predicate != commands[i].Data.Predicate {
+			// first record in batch of commands with same CSP
+			if i == 0 || commands[i-1] == nil ||
+				commands[i-1].Data.Context != commands[i].Data.Context ||
+				commands[i-1].Data.Context == commands[i].Data.Context &&
+					(commands[i-1].Data.Subject != commands[i].Data.Subject ||
+						commands[i-1].Data.Subject == commands[i].Data.Subject && commands[i-1].Data.Predicate != commands[i].Data.Predicate) {
 				deleteObject = ""
 				issuedDelete = false
 				if commands[i].Verb == "delete" {
@@ -230,9 +239,12 @@ func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
 					}
 				}
 			}
-			// last record in batch of commands with same SP
-			if i == len(commands)-1 || commands[i].Data.Subject != commands[i+1].Data.Subject ||
-				commands[i].Data.Subject == commands[i+1].Data.Subject && commands[i].Data.Predicate != commands[i+1].Data.Predicate {
+			// last record in batch of commands with same CSP
+			if i == len(commands)-1 ||
+				commands[i].Data.Context != commands[i+1].Data.Context ||
+				commands[i].Data.Context == commands[i+1].Data.Context &&
+					(commands[i].Data.Subject != commands[i+1].Data.Subject ||
+						commands[i].Data.Subject == commands[i+1].Data.Subject && commands[i].Data.Predicate != commands[i+1].Data.Predicate) {
 				if commands[i].Verb == "delete" || issuedDelete && deleteObject != commands[i].Data.Object {
 					// enforce the previous delete
 					out = append(out, tmp...)
@@ -250,7 +262,7 @@ func (hx *Hexastore) update_batch(commands dbCommandSlice) error {
 		sort.Sort(out1)
 		for _, cmd := range out1 {
 			if debug {
-				log.Printf("%s %s\n", cmd.Verb, string(cmd.Key))
+				log.Printf("TO HEX: %s %s\n", cmd.Verb, string(cmd.Key))
 			}
 			switch cmd.Verb {
 			case "put":

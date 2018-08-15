@@ -7,6 +7,7 @@ go get
 go build
 mkdir -p nss
 cd $CWD
+# presupposes go get nats-io/nats-streaming-server
 cd ../../nats-io/nats-streaming-server
 GOOS=darwin
 GOARCH=amd64
