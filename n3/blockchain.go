@@ -384,12 +384,22 @@ func NewBlockchain(contextName string) *Blockchain {
 
 //
 // returns the blockchain for the given context/user if one exists,
-// otherwise retuns an empty blockchain container
+// otherwise returns an empty blockchain container. If the blockchain
+// is local to the node (being created to process local requests:
+// author = cs.PublicID() ),
+// will create new local blockchain if one does not already exist.
 //
 func GetBlockchain(contextName string, author string) *Blockchain {
 
 	var tip []byte
 	db := boltDB
+
+	cms, ok := localCMSStore[contextName]
+	if author != cs.PublicID() {
+		cms = nil
+	} else if !ok {
+		return NewBlockchain(contextName)
+	}
 
 	err := db.Update(func(tx *bolt.Tx) error {
 
@@ -408,11 +418,6 @@ func GetBlockchain(contextName string, author string) *Blockchain {
 
 	if err != nil {
 		log.Panic(err)
-	}
-
-	cms := localCMSStore[contextName]
-	if author != cs.PublicID() {
-		cms = nil
 	}
 
 	bc := &Blockchain{

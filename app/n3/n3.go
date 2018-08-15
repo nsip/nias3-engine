@@ -105,7 +105,7 @@ func main() {
 	if b.Data.Subject == "Genesis" {
 		err := sc.Publish("feed", b.Serialize())
 		if err != nil {
-			log.Println("cannot commit gnensis block to feed: ", err)
+			log.Println("cannot commit genesis block to feed: ", err)
 		} else {
 			log.Println("genesis block committed to feed")
 		}

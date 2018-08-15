@@ -38,8 +38,9 @@ func RunWebserver(webPort int, hexastore *Hexastore, influx *InfluxModel) {
 		}
 	*/
 	// Route => handler
-	// TODO parameterise context
-	e.POST("/tuple", func(c echo.Context) error {
+	e.POST("/tuple/:key", func(c echo.Context) error {
+		context := c.Param("key")
+
 		// unpack tuple from payload
 		t := new(SPOTuple)
 		if err = c.Bind(t); err != nil {
@@ -47,7 +48,7 @@ func RunWebserver(webPort int, hexastore *Hexastore, influx *InfluxModel) {
 		}
 
 		// add to the blockchain
-		localBlockchain := GetBlockchain("SIF", cs.PublicID())
+		localBlockchain := GetBlockchain(context, cs.PublicID())
 		b, err := localBlockchain.AddNewBlock(t)
 		if err != nil {
 			log.Println("error adding data block via web:", err)
@@ -66,8 +67,9 @@ func RunWebserver(webPort int, hexastore *Hexastore, influx *InfluxModel) {
 
 	})
 
-	// TODO parameterise context
-	e.POST("/tuples", func(c echo.Context) error {
+	e.POST("/tuples/:key", func(c echo.Context) error {
+		context := c.Param("key")
+
 		// unpack tuple from payload
 		tuples := make([]*SPOTuple, 0)
 		// unpack tuple from payload
@@ -78,7 +80,7 @@ func RunWebserver(webPort int, hexastore *Hexastore, influx *InfluxModel) {
 		//log.Printf("/tuples: %#v\n", tuples)
 
 		// add to the blockchain
-		localBlockchain := GetBlockchain("SIF", cs.PublicID())
+		localBlockchain := GetBlockchain(context, cs.PublicID())
 		blocks, err := localBlockchain.AddNewBlocks(tuples)
 		if err != nil {
 			log.Println("error adding data block via web:", err)
