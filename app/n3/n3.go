@@ -53,9 +53,12 @@ func main() {
 		if msgCMS != nil {
 			msgCMS.Close()
 		}
-		if localBlockchain != nil {
-			localBlockchain.Close()
-		}
+		/*
+			if localBlockchain != nil {
+				localBlockchain.Close()
+			}
+		*/
+		n3.CloseLocalBlockchains()
 		if hexa != nil {
 			hexa.Close()
 		}

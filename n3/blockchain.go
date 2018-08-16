@@ -16,6 +16,9 @@ var boltDB *bolt.DB
 
 var localCMSStore map[string]*N3CMS
 
+// list of all local blockchains
+var localBlockchains map[string]bool
+
 func init() {
 	if boltDB == nil {
 		var dbErr error
@@ -25,6 +28,7 @@ func init() {
 		}
 	}
 	localCMSStore = make(map[string]*N3CMS)
+	localBlockchains = make(map[string]bool)
 }
 
 // Blockchain keeps a sequence of Blocks
@@ -312,9 +316,19 @@ func (bc *Blockchain) Close() {
 	bc.cms.Close()
 }
 
+// close all open local blockchains
+func CloseLocalBlockchains() {
+	for k, _ := range localBlockchains {
+		bc := GetBlockchain(k, cs.PublicID())
+		bc.Close()
+	}
+}
+
 //
 // NewBlockchain creates a new Blockchain with genesis Block
-// for the current owner with the specified context
+// for the current owner with the specified context.
+// This can include restoring a blockchain previously saved to disk
+// (bolt and CMS)
 //
 func NewBlockchain(contextName string) *Blockchain {
 	var tip []byte
@@ -370,6 +384,7 @@ func NewBlockchain(contextName string) *Blockchain {
 	if err != nil {
 		log.Panic(err)
 	}
+	localBlockchains[contextName] = true
 
 	bc := Blockchain{
 		context: contextName,
