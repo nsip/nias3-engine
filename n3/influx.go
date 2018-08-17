@@ -105,7 +105,8 @@ func (hx *InfluxModel) update_batch(commands dbCommandSlice) error {
 		if debug {
 			log.Printf("INFLUX OUT: %s %s %s %s\n", cmd.Verb, cmd.Data.Subject, cmd.Data.Predicate, cmd.Data.Object)
 		}
-		tuple := &pb.SPOTuple{Subject: cmd.Data.Subject, Object: cmd.Data.Object, Predicate: cmd.Data.Predicate, Context: cmd.Data.Context, Version: int64(cmd.Data.Version)}
+		tuple := &pb.SPOTuple{Subject: cmd.Data.Subject, Object: cmd.Data.Object, Predicate: cmd.Data.Predicate,
+			PredicateFlat: cmd.Data.PredicateFlat, Context: cmd.Data.Context, Version: int64(cmd.Data.Version)}
 		switch cmd.Verb {
 		case "delete":
 			hx.Pub.DeleteTuple(tuple)

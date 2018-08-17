@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"text/scanner"
@@ -43,6 +44,7 @@ var cs = n3crypto.NewCryptoService()
 // 	Context   string
 // 	Subject   string
 // 	Predicate string
+// 	PredicateFlat string
 // 	Object    string
 // 	Version   uint64
 // }
@@ -210,10 +212,11 @@ func (b *Block) CmsKey() string {
 // NewGenesisBlock creates and returns genesis Block
 func NewGenesisBlock(contextName string) (*Block, error) {
 	t := &SPOTuple{Subject: "Genesis",
-		Predicate: "Genesis",
-		Object:    "Genesis",
-		Context:   contextName,
-		Version:   0,
+		Predicate:     "Genesis",
+		PredicateFlat: "Genesis",
+		Object:        "Genesis",
+		Context:       contextName,
+		Version:       0,
 	}
 	blk, err := NewBlock(t, "")
 	if err != nil {
@@ -236,6 +239,12 @@ func (b *Block) Serialize() []byte {
 
 }
 
+var flattenPredicateRegexp = regexp.MustCompile(`\[\d+\]`)
+
+func FlattenPredicate(p string) string {
+	return flattenPredicateRegexp.ReplaceAllString(p, "")
+}
+
 // parse a tuple key into a triple
 func ParseTripleKey(t []byte) SPOTuple {
 	var s scanner.Scanner
@@ -255,7 +264,9 @@ func ParseTripleKey(t []byte) SPOTuple {
 		if s.TokenText() == "p" {
 			tok = s.Scan() // colon
 			tok = s.Scan()
-			o.Predicate, _ = strconv.Unquote(s.TokenText())
+			predicate, _ := strconv.Unquote(s.TokenText())
+			o.Predicate = predicate
+			o.PredicateFlat = FlattenPredicate(predicate)
 		}
 		if s.TokenText() == "o" {
 			tok = s.Scan() // colon

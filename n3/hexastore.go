@@ -568,7 +568,8 @@ func PermuteTripleKeys(list []SPOTuple) [][]byte {
 // by prefixing its subject with a datestamp. (If this is not robust enough,
 // will need to add deletion flag to tuples, as Apache Cassandra does.)
 func (t *SPOTuple) Tombstone() *SPOTuple {
-	ret := SPOTuple{Subject: t.Subject, Object: t.Object, Predicate: t.Predicate, Context: t.Context, Version: t.Version}
+	ret := SPOTuple{Subject: t.Subject, Object: t.Object, Predicate: t.Predicate,
+		PredicateFlat: t.PredicateFlat, Context: t.Context, Version: t.Version}
 	timestamp := "TIMESTAMP_"
 	timestampBytes, err := time.Now().MarshalText()
 	if err == nil {

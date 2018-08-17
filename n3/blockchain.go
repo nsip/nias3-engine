@@ -84,6 +84,7 @@ func (bc *Blockchain) AddNewBlock(data *SPOTuple) (*Block, error) {
 		data.Version = 1
 		bc.cms.Update(cmsKey, 1)
 	}
+	data.PredicateFlat = FlattenPredicate(data.Predicate)
 
 	// create the new block as next in chain
 	newBlock, err := NewBlock(data, lastHash)
@@ -187,6 +188,7 @@ func (bc *Blockchain) AddNewBlocks(datablocks []*SPOTuple) ([]*Block, error) {
 				data.Version = 1
 				bc.cms.Update(cmsKey, 1)
 			}
+			data.PredicateFlat = FlattenPredicate(data.Predicate)
 
 			// create the new block as next in chain
 			newBlock, err1 := NewBlock(data, lastHash)
