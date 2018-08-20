@@ -14,6 +14,7 @@ import (
 	inf "github.com/nsip/n3-transport/n3influx"
 	"github.com/nsip/n3-transport/pb"
 	"github.com/pkg/errors"
+	"gopkg.in/fatih/set.v0"
 )
 
 func init() {
@@ -119,7 +120,6 @@ func (hx *InfluxModel) update_batch(commands dbCommandSlice) error {
 
 // Reads tuples to be stored or deleted onto read model, and stores or deletes them.
 func (rm *InfluxModel) ConnectToFeed() error {
-
 	// create stan connection for writing to feed
 	sc, err := NSSConnection("n3readmodel")
 	if err != nil {
@@ -177,15 +177,65 @@ func (rm *InfluxModel) ConnectToFeed() error {
 
 // get latest non-tombstoned tuples matching subject and context
 func (hx *InfluxModel) GetTuples(subject string, context string) ([]*SPOTuple, error) {
-	query := fmt.Sprintf("SELECT subject, predicate, object, tombstone, version from %s WHERE subject = '%s' GROUP BY predicate ORDER BY time DESC", context, subject)
+	query := fmt.Sprintf("SELECT subject, predicate, object, tombstone, version from %s WHERE subject = '%s' GROUP BY predicate", context, subject)
 	return hx.getInfluxTuples(query, context)
+}
+
+// get all xAPI tuples relating to a student identified by SIF Refid
+// does join on email addresses, which are what xAPI uses as ID (in test data)
+func (hx *InfluxModel) GetXapiTuplesBySIFRefid(refid string) ([]*SPOTuple, error) {
+	query := fmt.Sprintf("SELECT subject, predicate, object, tombstone, version from SIF WHERE subject = '%s' AND (predicateflat = 'StaffPersonal.PersonInfo.EmailList.Email' OR predicateflat = 'StudentPersonal.PersonInfo.EmailList.Email')", refid)
+	tuples, err := hx.getInfluxTuples(query, "SIF")
+	if err != nil || len(tuples) == 0 {
+		return make([]*SPOTuple, 0), err
+	}
+	emails := getInfluxValues(tuples, "object")
+	querytail := ""
+	for i, e := range emails {
+		if i > 0 {
+			querytail += " OR "
+		}
+		querytail += "(predicate = 'actor.mbox' AND object = 'mailto:" + e + "')"
+	}
+	query = "SELECT subject, predicate, object, tombstone, version from xAPI WHERE (" + querytail + ")"
+	tuples, err = hx.getInfluxTuples(query, "xAPI")
+	if err != nil || len(tuples) == 0 {
+		return make([]*SPOTuple, 0), err
+	}
+	ids := getInfluxValues(tuples, "subject")
+	querytail = ""
+	for i, e := range ids {
+		if i > 0 {
+			querytail += " OR "
+		}
+		querytail += "subject = '" + e + "'"
+	}
+	query = "SELECT subject, predicate, object, tombstone, version from xAPI WHERE (" + querytail + ")"
+	return hx.getInfluxTuples(query, "xAPI")
+}
+
+// get distinct values of subject/object/predicate as a string slice from a slice of tuples
+func getInfluxValues(tuples []*SPOTuple, value string) []string {
+	ret := set.New()
+	for _, t := range tuples {
+		switch value {
+		case "subject":
+			ret.Add(t.Subject)
+		case "object":
+			ret.Add(t.Object)
+		case "predicate":
+			ret.Add(t.Predicate)
+		}
+	}
+	return set.StringSlice(ret)
 }
 
 // get tuples out of Influx query
 // Presupposes query has been for subject, predicate, object, tombstone, version in that order
+// Appends "ORDER BY time DESC" to all queries
 func (hx *InfluxModel) getInfluxTuples(query string, context string) ([]*SPOTuple, error) {
 	objs := make([]*SPOTuple, 0)
-	response, err := hx.Pub.Query(influx.Query{Command: query, Database: "tuples"})
+	response, err := hx.Pub.Query(influx.Query{Command: query + " ORDER BY time DESC", Database: "tuples"})
 	if err != nil {
 		log.Println(err)
 		return objs, err
@@ -194,33 +244,38 @@ func (hx *InfluxModel) getInfluxTuples(query string, context string) ([]*SPOTupl
 		log.Println(response.Error())
 		return objs, response.Error()
 	}
-	if len(response.Results) > 0 && len(response.Results[0].Series) > 0 {
-		//log.Printf("%#v\n", response.Results)
-		for _, s := range response.Results[0].Series {
-			log.Printf("%#v\n", s)
-			if len(s.Values) == 0 {
-				continue
+	if len(response.Results) > 0 {
+		for i := range response.Results {
+			if len(response.Results[i].Series) > 0 {
+				for _, s := range response.Results[i].Series {
+					//log.Printf("%#v\n", s)
+					if len(s.Values) == 0 {
+						continue
+					}
+					for _, v := range s.Values {
+						// gotcha with influx queries: the zeroth result column is always the timestamp
+						if v[4].(string) == "true" {
+							// tombstoned value
+							continue
+						}
+						if v[3] == nil {
+							// deleted object
+							continue
+						}
+						version, err := v[5].(json.Number).Int64()
+						if err != nil {
+							version = 1
+						}
+						objs = append(objs, &SPOTuple{
+							Subject:   v[1].(string),
+							Predicate: v[2].(string),
+							Object:    v[3].(string),
+							Context:   context,
+							Version:   uint64(version),
+						})
+					}
+				}
 			}
-			// gotcha with influx queries: the zeroth result column is always the timestamp
-			if s.Values[0][4].(string) == "true" {
-				// tombstoned value
-				continue
-			}
-			if s.Values[0][3] == nil {
-				// deleted object
-				continue
-			}
-			version, err := s.Values[0][5].(json.Number).Int64()
-			if err != nil {
-				version = 1
-			}
-			objs = append(objs, &SPOTuple{
-				Subject:   s.Values[0][1].(string),
-				Predicate: s.Values[0][2].(string),
-				Object:    s.Values[0][3].(string),
-				Context:   context,
-				Version:   uint64(version),
-			})
 		}
 	}
 	return objs, nil

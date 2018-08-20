@@ -155,6 +155,27 @@ func RunWebserver(webPort int, hexastore *Hexastore, influx *InfluxModel) {
 		return nil
 	})
 
+	// get xAPI tuples referring to the student identified by :key in SIF.
+	// Join is on actor.mbox = mailto:X, *.PersonInfo.EmailList.Email = X
+	e.GET("/sif2xapi/:key", func(c echo.Context) error {
+		key := c.Param("key")
+		tuples, err := influx.GetXapiTuplesBySIFRefid(key)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			log.Println(err)
+			return err
+		}
+		c.Response().Header().Set("Content-Type", "application/json")
+		ret, err := json.Marshal(tuples)
+		if err != nil {
+			c.String(http.StatusBadRequest, err.Error())
+			log.Println(err)
+			return err
+		}
+		c.String(http.StatusOK, string(ret))
+		return nil
+	})
+
 	/* NSW DIG hardcoded queries */
 	e.GET("/kla2student", func(c echo.Context) error {
 		kla := c.QueryParam("kla")

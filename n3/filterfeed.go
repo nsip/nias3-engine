@@ -124,6 +124,7 @@ func (hx *Hexastore) FilterFeed() error {
 
 			// get the tuple
 			t := blk.Data
+			t.PredicateFlat = FlattenPredicate(t.Predicate)
 
 			// assign data tuple version within this b/c context
 			cmsKey := t.CmsKeySP()

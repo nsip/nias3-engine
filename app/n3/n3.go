@@ -47,18 +47,13 @@ func main() {
 
 	go func() {
 		<-c
+		n3.CloseLocalBlockchains()
 		if nss != nil {
 			nss.Stop()
 		}
 		if msgCMS != nil {
 			msgCMS.Close()
 		}
-		/*
-			if localBlockchain != nil {
-				localBlockchain.Close()
-			}
-		*/
-		n3.CloseLocalBlockchains()
 		if hexa != nil {
 			hexa.Close()
 		}

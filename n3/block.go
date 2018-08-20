@@ -239,10 +239,13 @@ func (b *Block) Serialize() []byte {
 
 }
 
-var flattenPredicateRegexp = regexp.MustCompile(`\[\d+\]`)
+var flattenPredicateRegexp1 = regexp.MustCompile(`\[\d+\]`)
+var flattenPredicateRegexp2 = regexp.MustCompile(`.#text$`)
 
 func FlattenPredicate(p string) string {
-	return flattenPredicateRegexp.ReplaceAllString(p, "")
+	return flattenPredicateRegexp2.ReplaceAllString(
+		flattenPredicateRegexp1.ReplaceAllString(p, ""),
+		"")
 }
 
 // parse a tuple key into a triple
