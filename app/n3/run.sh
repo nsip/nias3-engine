@@ -15,6 +15,7 @@ fi
 nss/nats-streaming-server -p 4223 & echo $! > nats.pid
 
 # rethinkdb & echo $! >> nats.pid
+mongod --config mongodb.conf & echo $! >> nats.pid
 influxd -config influxdb.conf & echo $! >> nats.pid
 
 # give the nats server and rethink time to come up

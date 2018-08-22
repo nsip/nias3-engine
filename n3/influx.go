@@ -121,7 +121,7 @@ func (hx *InfluxModel) update_batch(commands dbCommandSlice) error {
 // Reads tuples to be stored or deleted onto read model, and stores or deletes them.
 func (rm *InfluxModel) ConnectToFeed() error {
 	// create stan connection for writing to feed
-	sc, err := NSSConnection("n3readmodel")
+	sc, err := NSSConnection("n3influxmodel")
 	if err != nil {
 		log.Println("cannot connect read model to nss: ", err)
 		return err

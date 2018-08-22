@@ -29,6 +29,7 @@ func main() {
 	var localBlockchain *n3.Blockchain
 	var hexa *n3.Hexastore
 	var infl *n3.InfluxModel
+	var mongo *n3.MongoModel
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -59,6 +60,9 @@ func main() {
 		}
 		if infl != nil {
 			infl.Close()
+		}
+		if mongo != nil {
+			mongo.Close()
 		}
 		if *cpuprofile != "" {
 			pprof.StopCPUProfile()
@@ -160,9 +164,15 @@ func main() {
 	}
 
 	infl = n3.NewInfluxModel()
-	infl.ConnectToFeed()
+	err = infl.ConnectToFeed()
 	if err != nil {
 		log.Fatal("cannot connect influx model to feed")
+	}
+
+	mongo = n3.NewMongoModel()
+	err = mongo.ConnectToFeed()
+	if err != nil {
+		log.Fatal("cannot connect mongo model to feed")
 	}
 
 	// start the webserver

@@ -1,4 +1,4 @@
-// rethink.go
+// mongo.go
 
 package n3
 
@@ -9,74 +9,41 @@ import (
 	"sort"
 	"time"
 
+	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/pkg/errors"
 	"github.com/tidwall/sjson"
-	r "gopkg.in/rebirthdb/rebirthdb-go.v4"
 )
 
-/* I can't get simple queries to run, and Rethink in Go (as opposed to Python or Ruby) is abysmally documented,
-and counterintuitive. I'll be looking for a different document database
-*/
-
-var session *r.Session
-
 const DBNAME = "readview"
+
+var session *mgo.Session
 
 func init() {
 	if session == nil {
 		var dbErr error
-		session, dbErr = r.Connect(r.ConnectOpts{
-			Address:  "localhost:28015",
-			Database: DBNAME,
-		})
+		session, dbErr = mgo.Dial("localhost")
 		if dbErr != nil {
-			log.Fatal(errors.Wrap(dbErr, "cannot open rebirthdb read model."))
+			log.Fatal(errors.Wrap(dbErr, "cannot open mongodb read model."))
 		}
-		log.Println("****** RETHINK!! *****")
-		if err := r.DBCreate(DBNAME).Exec(session); err != nil {
-			log.Println(err)
-		}
-
-		/*
-			err := r.DBList().Contains(DBNAME).Do(r.Branch(r.Row, r.DB(DBNAME), r.DBCreate(DBNAME))).Exec(session)
-
-			//Run(session) //.Pluck(DBNAME).Run(session)
-			//var ok bool
-			if err != nil {
-				log.Fatal(errors.Wrap(err, "cannot open rebirthdb read model."))
-			} else {
-						doc := make([]string, 0)
-						ok = dblist.Next(&doc)
-						log.Println(ok)
-						log.Printf("%#v", doc)
-					}
-					if !ok {
-						if _, err = r.DBCreate(DBNAME).Run(session); err != nil {
-							log.Fatal(errors.Wrap(err, "cannot open rebirthdb read model."))
-						}
-					} else if err != nil {
-						log.Fatal(errors.Wrap(err, "cannot open rebirthdb read model."))
-					}
-			}
-		*/
 	}
 }
 
-type ReadModel struct {
+type MongoModel struct {
 	Db      string
-	Session *r.Session
+	Session *mgo.Session
 }
 
-func (rm *ReadModel) DB() r.Term {
-	return r.DB(rm.Db)
-}
-
-func NewReadModel() *ReadModel {
-	return &ReadModel{
+func NewMongoModel() *MongoModel {
+	return &MongoModel{
 		Db:      DBNAME,
 		Session: session,
 	}
+}
+
+func (hx *MongoModel) DB() *mgo.Database {
+	return hx.Session.DB(hx.Db)
 }
 
 // Tuple update Commands batch is filtered here as with Hexastore.update_batch(), but without
@@ -90,7 +57,7 @@ func NewReadModel() *ReadModel {
 //       * Else, pass it through
 //   * Ignore all commands in between: they have been overruled within the batch
 
-func (hx *ReadModel) filter_batch(commands dbCommandSlice) dbCommandSlice {
+func (hx *MongoModel) filter_batch(commands dbCommandSlice) dbCommandSlice {
 	sort.Sort(commands)
 	out := make([]*DbCommand, 0)
 	tmp := make([]*DbCommand, 0)
@@ -141,12 +108,12 @@ func (hx *ReadModel) filter_batch(commands dbCommandSlice) dbCommandSlice {
 
 // Save a batch of commands to delete or put tuples, and transform them into JSON
 // documents around the same subject, where applicable. Each document is saved in
-// a Rethink table named for content + root element.
+// a Mongo collection named for content + (in the case of SIF) root element.
 // Tombstones are ignored.
 // * Filter out redundant commands
 // * Gather up commands by object (same subject and context)
 // * Process the commands for an object in order: delete entries, put entries
-func (hx *ReadModel) update_batch(commands dbCommandSlice) error {
+func (hx *MongoModel) update_batch(commands dbCommandSlice) error {
 	if debug {
 		log.Printf("Updating %d entries\n", len(commands))
 	}
@@ -156,7 +123,7 @@ func (hx *ReadModel) update_batch(commands dbCommandSlice) error {
 	out1 := hx.filter_batch(commands)
 	var tmp []*DbCommand
 	for i := range out1 {
-		log.Printf("INPUT: %s %s %s %s %d\n", out1[i].Verb, out1[i].Data.Subject, out1[i].Data.Predicate, out1[i].Data.Object, out1[i].Sequence)
+		//log.Printf("INPUT: %s %s %s %s %d\n", out1[i].Verb, out1[i].Data.Subject, out1[i].Data.Predicate, out1[i].Data.Object, out1[i].Sequence)
 		// new context+subject: gather up all tuples in order to update document with
 		if i == 0 || out1[i].Data.Context != out1[i-1].Data.Context ||
 			out1[i].Data.Context == out1[i-1].Data.Context && out1[i].Data.Subject != out1[i-1].Data.Subject {
@@ -179,21 +146,26 @@ var rootNodeJsonPath = regexp.MustCompile(`^[^.]+`)
 // from NIAS3
 var mxj2sjsonPathRe1 = regexp.MustCompile(`\[(\d+)\]`)
 var mxj2sjsonPathRe2 = regexp.MustCompile(`\.#text$`)
+var mxj2sjsonPathRe3 = regexp.MustCompile(`\.-`)
 
 // from NIAS3
 // Convert an MXJ path to a node to an sjson path, using dot notation instead of array, and ".Value" instead of .#text
+// For Mongo, convert attribute keys, "-xxx", to "_xxx"
 func mxj2sjsonPath(p string) string {
 	return mxj2sjsonPathRe1.ReplaceAllString(
-		mxj2sjsonPathRe2.ReplaceAllString(p, ".Value"), ".$1")
+		mxj2sjsonPathRe2.ReplaceAllString(
+			mxj2sjsonPathRe3.ReplaceAllString(p, "._"),
+			".Value"),
+		".$1")
 }
 
-// update document in rethink with tuples in commands.
+// update document in mongo with tuples in commands.
 // document is identified by subject of the tuples, and is of type given by tuple context + tuple subject,
 // which is the same for all commands in the batch
 // Document id is tuple subject.
 // Document table is context. If context is SIF, document table is context + root element (first node in the predicate),
 // which means a table for each SIF object type; SIF is not expected to reuse subjects (RefIDs) across objects.
-func (hx *ReadModel) update_object(commands []*DbCommand) error {
+func (hx *MongoModel) update_object(commands []*DbCommand) error {
 	if commands == nil || len(commands) == 0 {
 		return nil
 	}
@@ -202,52 +174,24 @@ func (hx *ReadModel) update_object(commands []*DbCommand) error {
 	if table == "SIF" {
 		table = table + "_" + rootNodeJsonPath.FindString(commands[0].Data.Predicate)
 	}
-	log.Println(table)
-	tablelist, err := hx.DB().TableList().Pluck(table).Run(hx.Session)
-	log.Println("A")
-	if err != nil {
-		log.Println(err)
-		return err
-	} else {
-		defer tablelist.Close()
-		log.Println("B")
-		doc, ok := tablelist.NextResponse()
-		if !ok {
-			log.Println(tablelist.Err())
+	c := hx.DB().C(table)
+	var result *bson.M
+	doc := []byte(`{"_id": "` + id + `"}`)
+	err := c.FindId(id).One(&result)
+	if err == nil {
+		doc, err = bson.MarshalJSON(result)
+		if err != nil {
+			log.Println(err)
 			return err
-		} else {
-			log.Println("C")
-			if string(doc) == "[]" {
-				log.Printf("creating table %s\n", table)
-				if _, err = hx.DB().TableCreate(table).Run(hx.Session); err != nil {
-					log.Println(err)
-					return err
-				}
-				log.Printf("created table %s\n", table)
-			} else {
-				log.Println("D")
-				log.Println(string(doc))
-			}
-
 		}
-	}
-	log.Println("E")
-	doc := []byte("")
-	found := false
-	docCursor, err := hx.DB().Table(table).Get(id).Run(hx.Session)
-	defer docCursor.Close()
-	if err != nil {
-		log.Println(err)
-		return err
-	} else {
-		log.Println("F")
-		doc, found = docCursor.NextResponse()
-		if !found {
-			doc = []byte("")
+		//log.Printf("RETRIEVED: %s\n", string(doc))
+		err = c.RemoveId(id)
+		if err != nil {
+			log.Println(err)
+			return err
 		}
 	}
 	for _, cmd := range commands {
-		log.Printf("%s %s %s %s\n", cmd.Verb, cmd.Data.Subject, cmd.Data.Predicate, cmd.Data.Object)
 		switch cmd.Verb {
 		case "delete":
 			doc, err = sjson.DeleteBytes(doc, mxj2sjsonPath(cmd.Data.Predicate))
@@ -255,21 +199,25 @@ func (hx *ReadModel) update_object(commands []*DbCommand) error {
 			doc, err = sjson.SetBytes(doc, mxj2sjsonPath(cmd.Data.Predicate), cmd.Data.Object)
 		}
 	}
-	log.Println(string(doc))
-	/*writeout*/ _, err = hx.DB().Table(table).Get(id).Update(doc).RunWrite(hx.Session)
+	//log.Println(string(doc))
+	var m map[string]interface{}
+	err = bson.UnmarshalJSON(doc, &m)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
-	//defer writeout.Close()
-	log.Println("G")
+	err = c.Insert(m)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
 	return nil
 }
 
 // Reads tuples to be stored or deleted onto read model, and stores or deletes them.
-func (rm *ReadModel) ConnectToFeed() error {
+func (rm *MongoModel) ConnectToFeed() error {
 	// create stan connection for writing to feed
-	sc, err := NSSConnection("n3readmodel")
+	sc, err := NSSConnection("n3mongomodel")
 	if err != nil {
 		log.Println("cannot connect read model to nss: ", err)
 		return err
@@ -305,7 +253,7 @@ func (rm *ReadModel) ConnectToFeed() error {
 			filtered_records++
 			// get the block from the feed
 			cmd := DeserializeDbCommand(m.Data)
-			//log.Printf("%s %s %s %s\n", cmd.Verb, cmd.Data.Subject, cmd.Data.Predicate, cmd.Data.Object)
+			//log.Printf("INPUT: %s %s %s %s\n", cmd.Verb, cmd.Data.Subject, cmd.Data.Predicate, cmd.Data.Object)
 			mutex.Lock()
 			commands = append(commands, cmd)
 			mutex.Unlock()
@@ -327,6 +275,6 @@ func (rm *ReadModel) ConnectToFeed() error {
 //
 // clean shutdown of underlying data store
 //
-func (rm *ReadModel) Close() {
+func (rm *MongoModel) Close() {
 	rm.Session.Close()
 }
