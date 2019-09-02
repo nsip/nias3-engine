@@ -1,4 +1,10 @@
 # nias3-engine
+
+*** DEPRECATED (RETIRED) ***
+
+*This repository is obsolete and retired (archived). This is an unmantained repository. In particular, note that it is not being updated with security patches, including those for dependent libraries.*
+
+
 p2p and sig-chain core engine for n3 services
 
 Presupposes the following are installed:
